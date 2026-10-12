@@ -87,6 +87,11 @@ enum Cmd {
         /// write the comparison as JSON
         #[arg(long)]
         out: Option<PathBuf>,
+        /// only every N-th case (with --offset)
+        #[arg(long, default_value_t = 1)]
+        every: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
         /// fast mode, compared with the reference's fast-mode inputs (variants*.jsonl, comma-separated)
         #[arg(long)]
         fast_variants: Option<String>,
@@ -135,7 +140,8 @@ fn run() -> Result<()> {
                 timings,
                 siting_left,
             };
-            let r = score::score(&o, &model)?;
+            let backend = grail_gpu::GpuBackend::new()?;
+            let r = score::score(&o, &model, &backend)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&r)?);
             } else {
@@ -143,10 +149,12 @@ fn run() -> Result<()> {
             }
         }
         Cmd::Denoise { input, output } => denoise_y4m(&input, &output)?,
-        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, fast_variants } => {
+        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, every, offset, fast_variants } => {
             match fast_variants {
-                Some(v) => check::run_fast(&file, &v, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model)?,
-                None => check::run(&file, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model)?,
+                Some(v) => check::run_fast(&file, &v, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model,
+                                           &grail_gpu::GpuBackend::new()?)?,
+                None => check::run(&file, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model, every, offset,
+                                   &grail_gpu::GpuBackend::new()?)?,
             }
         }
     }

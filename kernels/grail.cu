@@ -284,7 +284,7 @@ extern "C" __global__ void feat_accum(const float* sp, const float* cp, const fl
     for (int j = threadIdx.x; j < ACC_N; j += blockDim.x)
         if (sh[j] != 0.f) atomicAdd(acc + j, (double)sh[j]);
 }
-// texture energy of the ORIGINALS in textured 64-px tiles (tex = !m & loc > 3): one block per tile;
+// energy of the ORIGINALS in textured 64-px tiles (tex = !m & loc > 3): one block per tile;
 // os: s, G0.6, G1.2, G2.4, G4.8 of the source (bands 1..3), oc likewise. acc[0] += vs, acc[1] += vc for tiles with
 // >= half the pixels textured.
 extern "C" __global__ void tex_tiles(const float* sg0, const float* sg1, const float* sg2, const float* sg3,

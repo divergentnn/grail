@@ -35,11 +35,7 @@ pub struct LineArt {
     sel: Select,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct DetFrame {
-    pub tex6: f64,
-    pub inkflat_s: f64,
-}
+pub use grail_stages::DetFrame;
 
 impl LineArt {
     pub fn new(w: usize, h: usize) -> Result<LineArt> {

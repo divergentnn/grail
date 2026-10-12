@@ -1,0 +1,9 @@
+[package]
+name = "grail-stages"
+description = "GRAIL stage interfaces: measurement denoiser, grain features, line-art path (implemented by grail-gpu; a CPU backend can implement them too)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true

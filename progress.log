@@ -3,3 +3,5 @@
 16:08 first full build OK (CUDA sm_86): driver layer, flowdegrain2 port, features, line art, vship, decode, model, CLI; next: check-reference on the 13 cases; ETA first case 16:20; STUCK IF no case result by 16:45
 16:12 check-reference: all 13 cases within tolerance, max |dQ| 0.0004 (S0 needed FFVship's per-file chroma siting; denoiser/features exact to 1e-5); next: commit, bit-exact denoiser check vs flowdegrain2.py, fast mode, README; ETA 17:25 for code that needs the GPU; STUCK IF no commit by 16:40
 16:16 denoiser bit-exact vs flowdegrain2.py (1080p 24 frames, 4K 16 frames, every sample); fast mode matches the reference's fast inputs on 13 cases (max |dQ| 0.0004); next: whole-set subset check, README, HIP container; GPU work stops 17:25; STUCK IF no whole-set result by 17:20
+16:17 whole-set subset check started (every 4th of 574 showings, ~144 cases, PID 3493491); ETA 17:10; STUCK IF results/whole_subset.log has no new case line for 3 min
+16:18 HIP compile check: kernels/flowdegrain2.cu and grail.cu compile with hipcc (ROCm 7.2.4 container, gfx1100 + gfx90a), hipify-perl only adds the hip_runtime include; not run (no AMD GPU)

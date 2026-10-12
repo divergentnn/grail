@@ -3,6 +3,7 @@
 use crate::model::Model;
 use crate::score::{self, Crop, Opts};
 use crate::vship::Colour;
+use grail_stages::Backend;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -42,15 +43,49 @@ fn rel(a: f64, b: f64) -> f64 {
     (a - b).abs() / b.abs().max(1e-6)
 }
 
-pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize, out: Option<&Path>, model: &Model)
-           -> Result<()> {
+fn ranks(v: &[f64]) -> Vec<f64> {
+    let mut idx: Vec<usize> = (0..v.len()).collect();
+    idx.sort_by(|&a, &b| v[a].partial_cmp(&v[b]).unwrap());
+    let mut r = vec![0.0; v.len()];
+    let mut i = 0;
+    while i < idx.len() {
+        let mut j = i;
+        while j + 1 < idx.len() && v[idx[j + 1]] == v[idx[i]] {
+            j += 1;
+        }
+        for k in i..=j {
+            r[idx[k]] = (i + j) as f64 / 2.0;
+        }
+        i = j + 1;
+    }
+    r
+}
+
+/// Spearman rank correlation
+pub fn spearman(a: &[f64], b: &[f64]) -> f64 {
+    let (ra, rb) = (ranks(a), ranks(b));
+    let n = a.len() as f64;
+    let (ma, mb) = (ra.iter().sum::<f64>() / n, rb.iter().sum::<f64>() / n);
+    let cov: f64 = ra.iter().zip(&rb).map(|(x, y)| (x - ma) * (y - mb)).sum();
+    let va: f64 = ra.iter().map(|x| (x - ma).powi(2)).sum();
+    let vb: f64 = rb.iter().map(|y| (y - mb).powi(2)).sum();
+    cov / (va * vb).sqrt()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize, out: Option<&Path>, model: &Model,
+           every: usize, offset: usize, backend: &dyn Backend) -> Result<()> {
     let d: Value = serde_json::from_str(&std::fs::read_to_string(file)?)?;
     let fg = fg.or_else(|| std::env::var("GRAIL_FULLGRAIN_LIB").ok().map(PathBuf::from));
     let mut worst: BTreeMap<&str, f64> = BTreeMap::new();
     let mut rows = vec![];
-    for c in d["cases"].as_array().context("cases")? {
+    let mut failures = vec![];
+    for (ci, c) in d["cases"].as_array().context("cases")?.iter().enumerate() {
         let name = c["case"].as_str().unwrap_or("?");
         if only.map(|o| !name.contains(o) && !c["key"].as_str().unwrap_or("").contains(o)).unwrap_or(false) {
+            continue;
+        }
+        if every > 1 && ci % every != offset % every {
             continue;
         }
         let inp = &c["inputs"];
@@ -78,7 +113,14 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
         };
         eprintln!("case {name} ({})", c["key"].as_str().unwrap_or(""));
         let t0 = std::time::Instant::now();
-        let r = score::score(&o, model).with_context(|| format!("case {name}"))?;
+        let r = match score::score(&o, model, backend) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("  FAILED: {e:#}");
+                failures.push(json!({"case": name, "key": c["key"], "error": format!("{e:#}")}));
+                continue;
+            }
+        };
         let secs = t0.elapsed().as_secs_f64();
         let mut err: BTreeMap<&str, f64> = BTreeMap::new();
         let ft = &c["features"];
@@ -185,6 +227,16 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
                           "errors": err, "penalties": pen, "seed_view_match": seed_ok, "seconds": secs,
                           "port": serde_json::to_value(&r)?}));
     }
+    if rows.len() > 2 {
+        let qa: Vec<f64> = rows.iter().map(|r| r["Q_ref"].as_f64().unwrap()).collect();
+        let qb: Vec<f64> = rows.iter().map(|r| r["Q_port"].as_f64().unwrap()).collect();
+        let dq: Vec<f64> = rows.iter().map(|r| r["dQ"].as_f64().unwrap().abs()).collect();
+        let mut sd = dq.clone();
+        sd.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        println!("\n{} cases: Spearman(port Q, reference Q) = {:.6}; |dQ| median {:.5}, p99 {:.5}, max {:.5}; {} failed",
+                 rows.len(), spearman(&qa, &qb), sd[sd.len() / 2], sd[(sd.len() * 99 / 100).min(sd.len() - 1)],
+                 sd[sd.len() - 1], failures.len());
+    }
     println!("\nper-case |dQ|:");
     for r in &rows {
         println!("  {:24} {:46} Q ref {:8.3} port {:8.3}  dQ {:+.4}", r["case"].as_str().unwrap(),
@@ -202,7 +254,7 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
                  if ok { "ok  " } else { "OVER" }, desc);
     }
     if let Some(p) = out {
-        std::fs::write(p, serde_json::to_string_pretty(&json!({"cases": rows, "worst": worst}))?)?;
+        std::fs::write(p, serde_json::to_string_pretty(&json!({"cases": rows, "worst": worst, "failures": failures}))?)?;
     }
     println!("\n{}", if ok_all { "all stages within tolerance" } else { "some stages over tolerance (see above)" });
     Ok(())
@@ -211,8 +263,9 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
 /// fast mode against the reference's fast-mode inputs (variants.py: S0 and structure on the subsample, the grain
 /// features on the subsample, AV1 synthetic grain not denoised). The reference's fast Q is formed here from those
 /// inputs with the v2.1 model (sigma_g of the subsample; line-art peak over the subsample's frames).
+#[allow(clippy::too_many_arguments)]
 pub fn run_fast(file: &Path, variants: &str, only: Option<&str>, fg: Option<PathBuf>, threads: usize, out: Option<&Path>,
-                model: &Model) -> Result<()> {
+                model: &Model, backend: &dyn Backend) -> Result<()> {
     use crate::model::{self as M, Feats};
     let d: Value = serde_json::from_str(&std::fs::read_to_string(file)?)?;
     let mut var: BTreeMap<String, Value> = BTreeMap::new();
@@ -264,7 +317,7 @@ pub fn run_fast(file: &Path, variants: &str, only: Option<&str>, fg: Option<Path
         };
         eprintln!("case {name} ({key}) fast");
         let t0 = std::time::Instant::now();
-        let r = score::score(&o, model).with_context(|| format!("case {name}"))?;
+        let r = score::score(&o, model, backend).with_context(|| format!("case {name}"))?;
         let secs = t0.elapsed().as_secs_f64();
         // reference fast Q from its inputs
         let idx: Vec<usize> = (0..n).step_by(4).flat_map(|a| [a, a + 1]).filter(|&t| t < n).collect();

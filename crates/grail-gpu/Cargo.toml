@@ -12,5 +12,6 @@ cuda = []
 hip = []
 
 [dependencies]
+grail-stages = { path = "../grail-stages" }
 anyhow.workspace = true
 libloading.workspace = true

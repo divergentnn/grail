@@ -15,6 +15,7 @@ cuda = ["grail-gpu/cuda"]
 hip = ["grail-gpu/hip"]
 
 [dependencies]
+grail-stages = { path = "../grail-stages" }
 grail-gpu = { path = "../grail-gpu", default-features = false }
 anyhow.workspace = true
 libloading.workspace = true

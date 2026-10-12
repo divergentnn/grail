@@ -7,10 +7,7 @@ use crate::model::{self, Feats, Model};
 use crate::seed::{seed_view, SeedView};
 use crate::vship::{Colour, Vship};
 use anyhow::{bail, Context, Result};
-use grail_gpu::denoise::Denoiser;
-use grail_gpu::features::{FeatureTotals, Features, FrameSet};
-use grail_gpu::lineart::LineArt;
-use grail_gpu::{args, DBuf};
+use grail_stages::{Backend, Denoise, FeatureFrame, FeatureTotals, Win};
 use serde::Serialize;
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -195,8 +192,7 @@ struct Stream {
     fh: usize,
     act: [usize; 4],
     win: [usize; 4],
-    den: Option<Denoiser>,
-    out: Option<DBuf>,
+    den: Option<Box<dyn Denoise>>,
     pushed: usize,
     total: usize,
     windows: VecDeque<(usize, Vec<u16>)>,
@@ -238,14 +234,16 @@ impl Stream {
         Ok(true)
     }
 
-    fn window(&self, idx: usize) -> Result<&Vec<u16>> {
-        self.windows.iter().find(|(i, _)| *i == idx).map(|(_, v)| v)
-            .with_context(|| format!("window frame {idx} not buffered"))
+    /// take the window of frame idx (each frame is taken once, in order)
+    fn take_window(&mut self, idx: usize) -> Result<Vec<u16>> {
+        let pos = self.windows.iter().position(|(i, _)| *i == idx)
+            .with_context(|| format!("window frame {idx} not buffered"))?;
+        Ok(std::mem::take(&mut self.windows[pos].1))
     }
 
-    /// make frame idx available: its window on the host and, with a denoiser, its denoised active picture in
-    /// self.out (frames before idx that are not wanted are skipped)
-    fn produce(&mut self, idx: usize) -> Result<()> {
+    /// make frame idx available: its window on the host and, with a denoiser, its denoised window in `out`
+    /// (earlier frames that are not scored are skipped)
+    fn produce(&mut self, idx: usize, out: Option<&mut Win>) -> Result<()> {
         if self.den.is_none() {
             while self.pushed <= idx {
                 if !self.pull()? {
@@ -255,13 +253,16 @@ impl Stream {
             return Ok(());
         }
         loop {
-            let ready = self.den.as_ref().unwrap().ready();
-            match ready {
+            match self.den.as_ref().unwrap().ready() {
                 Some(j) if j < idx => {
-                    self.den.as_mut().unwrap().step(false, self.out.as_ref().unwrap())?;
+                    self.den.as_mut().unwrap().skip()?;
                 }
                 Some(j) if j == idx => {
-                    self.den.as_mut().unwrap().step(true, self.out.as_ref().unwrap())?;
+                    let pos = self.windows.iter().position(|(i, _)| *i == idx)
+                        .with_context(|| format!("window frame {idx} not buffered"))?;
+                    let (act, win) = (self.act, self.win);
+                    let orig = &self.windows[pos].1;
+                    self.den.as_mut().unwrap().produce_window(orig, act, win, out.expect("output window"))?;
                     return Ok(());
                 }
                 Some(j) => bail!("denoiser already past frame {idx} ({j})"),
@@ -279,7 +280,7 @@ fn mean(v: &[f64]) -> f64 {
     v.iter().sum::<f64>() / v.len().max(1) as f64
 }
 
-pub fn score(o: &Opts, model: &Model) -> Result<Report> {
+pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     let t_start = Instant::now();
     let mut tm: BTreeMap<String, f64> = BTreeMap::new();
     let pr = probe(&o.reference)?;
@@ -370,10 +371,8 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
                          ract[2] as i64, ract[3] as i64], pd.width, pd.height);
     let sc = if pr.height > 1600 { 2.0 } else { 1.0 };
 
-    // GPU and metric handles
-    let t_gpu = Instant::now();
-    let g = grail_gpu::try_init()?;
-    g.bind_thread()?;
+    // metric handles and stages
+    let t_init = Instant::now();
     let vs = Vship::load()?;
     // plain pair: each file's chroma siting, as FFVship reads it (the reference's S0); denoised pairs: left on both
     // sides, as the reference's in-process libvship calls (vship_api.py)
@@ -383,13 +382,12 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
         vs.ssimu2(w, h, colour, (crate::vship::chroma_loc(&pr.chroma_location), crate::vship::chroma_loc(&pd.chroma_location)))?
     };
     let ss = vs.ssimu2(w, h, colour, (0, 0))?;
-    tm.insert("init".into(), t_gpu.elapsed().as_secs_f64());
+    tm.insert("init".into(), t_init.elapsed().as_secs_f64());
 
     let rsrc = if keep && !mem.is_empty() { Source::Mem(mem) } else { Source::Live(Decoder::start(rspec, 8)?) };
     let mut rstream = Stream {
-        src: rsrc, fw: pr.width, fh: pr.height, act: ract, win, den: Some(Denoiser::new(ract[2], ract[3])?),
-        out: Some(DBuf::new(ract[2] * ract[3] * 3)?), pushed: 0, total: rb - ra, windows: VecDeque::new(), wait: 0.0,
-        full: true,
+        src: rsrc, fw: pr.width, fh: pr.height, act: ract, win, den: Some(backend.denoiser(ract[2], ract[3])?),
+        pushed: 0, total: rb - ra, windows: VecDeque::new(), wait: 0.0, full: true,
     };
     let dgrain = match &fg_lib {
         Some(l) => Grain::FullFrame(l.clone()),
@@ -400,31 +398,23 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
                              w: if denoise_cand { pd.width } else { w }, h: if denoise_cand { pd.height } else { h } };
     let mut cstream = Stream {
         src: Source::Live(Decoder::start(dspec, 8)?), fw: pd.width, fh: pd.height, act: dact, win: dwin,
-        den: if denoise_cand { Some(Denoiser::new(dact[2], dact[3])?) } else { None },
-        out: if denoise_cand { Some(DBuf::new(dact[2] * dact[3] * 3)?) } else { None },
+        den: if denoise_cand { Some(backend.denoiser(dact[2], dact[3])?) } else { None },
         pushed: 0, total: db - da, windows: VecDeque::new(), wait: 0.0, full: denoise_cand,
     };
     let mut ngstream = if synth {
         let spec = DecodeSpec { path: o.dist.clone(), av1: true, a: da, b: db, crop: Some(dwin), grain: Grain::Off,
                                 threads, w, h };
         Some(Stream { src: Source::Live(Decoder::start(spec, 8)?), fw: w, fh: h, act: [0, 0, w, h], win: [0, 0, w, h],
-                      den: None, out: None, pushed: 0, total: db - da, windows: VecDeque::new(), wait: 0.0,
-                      full: false })
+                      den: None, pushed: 0, total: db - da, windows: VecDeque::new(), wait: 0.0, full: false })
     } else {
         None
     };
 
-    let mut feats = Features::new(w, h, sc)?;
-    let mut la = LineArt::new(w, h)?;
-    let wn = w * h * 3 / 2;
-    let ds_win = DBuf::new(wn * 2)?;
-    let dc_win = DBuf::new(wn * 2)?;
-    let s_dev = DBuf::new(wn * 2)?;
-    let c_dev = DBuf::new(wn * 2)?;
-    let ng_dev = DBuf::new(wn * 2)?;
-    let orig_dev = DBuf::new(wn * 2)?;
-    let mut host_ds = vec![0u16; wn];
-    let mut host_dc = vec![0u16; wn];
+    let mut feats = backend.features(w, h, sc)?;
+    let mut la = backend.lineart(w, h)?;
+    // window slots, reused frame to frame (a backend keeps its device copies attached to them)
+    let (mut s_win, mut c_win, mut ng_win) = (Win::new(w, h), Win::new(w, h), Win::new(w, h));
+    let (mut ds_win, mut dc_win) = (Win::new(w, h), Win::new(w, h));
     let mut pf = PerFrame::default();
     let (mut det_tex, mut det_ink) = (vec![], vec![]);
     let mut last: Option<usize> = None;
@@ -433,68 +423,45 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
     let mut t_den = 0.0;
     let mut t_la = 0.0;
 
-    let cut = |st: &Stream, orig: &[u16], dst: &DBuf, host: &mut Vec<u16>| -> Result<()> {
-        orig_dev.write(orig)?;
-        let (a, wv) = (st.act, st.win);
-        grail_gpu::buf::launch_n("cut_window", wn, args![st.out.as_ref().unwrap(), a[2] as i32, a[3] as i32, &orig_dev,
-                                  wv[0] as i32, wv[1] as i32, w as i32, h as i32, a[0] as i32, a[1] as i32, dst])?;
-        dst.read(host)
-    };
-
     for &t in &scored {
         let tt = Instant::now();
-        rstream.produce(rfirst + t)?;
-        let s_win = rstream.window(rfirst + t)?.clone();
-        cut(&rstream, &s_win, &ds_win, &mut host_ds)?;
-        cstream.produce(dfirst + t)?;
-        let c_win = cstream.window(dfirst + t)?.clone();
-        if denoise_cand {
-            cut(&cstream, &c_win, &dc_win, &mut host_dc)?;
-        }
-        let ng_win = match ngstream.as_mut() {
-            Some(s) => {
-                s.produce(dfirst + t)?;
-                Some(s.window(dfirst + t)?.clone())
-            }
-            None => None,
-        };
-        if o.timings {
-            g.sync()?;
+        rstream.produce(rfirst + t, Some(&mut ds_win))?;
+        s_win.set(rstream.take_window(rfirst + t)?);
+        cstream.produce(dfirst + t, if denoise_cand { Some(&mut dc_win) } else { None })?;
+        c_win.set(cstream.take_window(dfirst + t)?);
+        if let Some(st) = ngstream.as_mut() {
+            st.produce(dfirst + t, None)?;
+            ng_win.set(st.take_window(dfirst + t)?);
         }
         t_den += tt.elapsed().as_secs_f64();
         let tt = Instant::now();
         pf.frame.push(t);
-        pf.ssimulacra2.push(ss0.score(&s_win, &c_win)?);
+        pf.ssimulacra2.push(ss0.score(&s_win.host, &c_win.host)?);
         if denoise_cand {
-            pf.s_d.push(ss.score(&host_ds, &host_dc)?);
+            pf.s_d.push(ss.score(&ds_win.host, &dc_win.host)?);
         }
-        if let Some(ng) = &ng_win {
-            pf.s_dp.push(ss.score(&host_ds, ng)?);
+        if synth {
+            pf.s_dp.push(ss.score(&ds_win.host, &ng_win.host)?);
         }
         t_metric += tt.elapsed().as_secs_f64();
         let tt = Instant::now();
-        s_dev.write(&s_win)?;
-        c_dev.write(&c_win)?;
-        if let Some(ng) = &ng_win {
-            ng_dev.write(ng)?;
-        }
-        let dc_ptr = if denoise_cand { dc_win.ptr } else { ng_dev.ptr };
-        let fs = FrameSet { s: s_dev.ptr, ds: ds_win.ptr, c: c_dev.ptr, dc: dc_ptr,
-                            cng: if synth && denoise_cand { Some(ng_dev.ptr) } else { None } };
         let consecutive = last.map(|l| l + 1 == t).unwrap_or(false);
-        feats.frame(&fs, consecutive)?;
+        let ff = if denoise_cand {
+            FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut dc_win,
+                           cng: if synth { Some(&mut ng_win) } else { None } }
+        } else {
+            FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut ng_win, cng: None }
+        };
+        feats.frame(ff, consecutive)?;
         last = Some(t);
-        if o.timings {
-            g.sync()?;
-        }
         t_feat += tt.elapsed().as_secs_f64();
         let tt = Instant::now();
         if t % 4 == 0 {
-            let d = la.detect(s_dev.ptr)?;
+            let d = la.detect(&mut s_win)?;
             det_tex.push(d.tex6);
             det_ink.push(d.inkflat_s);
         }
-        pf.lineart_near_top.push(la.ring(s_dev.ptr, c_dev.ptr)?);
+        pf.lineart_near_top.push(la.ring(&mut s_win, &mut c_win)?);
         t_la += tt.elapsed().as_secs_f64();
     }
     // drain the decoders (ffmpeg exits cleanly) and collect the seeds of the grain-free decode
@@ -519,7 +486,7 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
     let t_wall = t_start.elapsed().as_secs_f64();
 
     // model
-    let ft = finish_features(&feats.tot);
+    let ft = finish_features(feats.totals());
     let sigma_g = ft.sigma_g;
     let gg = model::smoothstep(sigma_g, model.sig.0, model.sig.1);
     let s0 = mean(&pf.ssimulacra2);
@@ -574,7 +541,7 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
         codec: pd.codec.clone(),
         std_decoder: seed_view(&seeds, pd.height),
         per_frame: pf,
-        gpu: g.device_name.clone(),
+        gpu: backend.name(),
         timings: tm,
     })
 }

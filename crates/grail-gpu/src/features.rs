@@ -23,21 +23,7 @@ pub struct FrameSet {
     pub cng: Option<u64>,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct FeatureTotals {
-    pub p_s: [[f64; NB]; 5],
-    pub p_c: [[f64; NB]; 5],
-    pub p_ng: [[f64; NB]; 3],
-    pub n_lum: [f64; NB],
-    pub chroma: [[f64; 2]; 2],
-    pub chroma_n: f64,
-    pub stick: [Vec<f64>; 2],
-    pub stickc: [Vec<f64>; 2],
-    pub vs: f64,
-    pub vc: f64,
-    pub flat_frac: Vec<f64>,
-    pub has_ng: bool,
-}
+pub use grail_stages::FeatureTotals;
 
 pub struct Features {
     w: usize,
