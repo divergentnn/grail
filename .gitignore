@@ -2,3 +2,4 @@
 /results/*.y4m
 /results/tmp*
 /results
+progress.log

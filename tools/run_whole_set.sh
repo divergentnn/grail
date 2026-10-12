@@ -4,9 +4,9 @@
 # ETA ~70 min on an otherwise busy RTX 3090; stuck if results/whole_rest_*.log gets no new "case" line for 5 min.
 set -e
 cd "$(dirname "$0")/.."
-LAB=${LAB:-/media/tmp/hunt/grain-lab/grainscore}
-FG=${GRAIL_FULLGRAIN_LIB:-/media/tmp/hunt/tools/dav1d-grain/build/src}
-[ -f results/whole_set.json ] || nice -n 19 /media/tmp/hunt/.venv/bin/python tools/make_whole_set.py "$LAB" results/whole_set.json
+LAB=${LAB:?set LAB to the GRAIL reference lab directory (grain-lab/grainscore)}
+FG=${GRAIL_FULLGRAIN_LIB:?set GRAIL_FULLGRAIN_LIB to the av1-fullgrain dav1d build (src/ with libdav1d.so)}
+[ -f results/whole_set.json ] || nice -n 19 "${PYTHON:-python3}" tools/make_whole_set.py "$LAB" results/whole_set.json
 for off in 0 2 3; do
   echo "$(date +%H:%M) whole set: offset $off start" >> progress.log
   nice -n 19 ./target/release/grail check-reference results/whole_set.json --every 4 --offset $off --threads 1 \

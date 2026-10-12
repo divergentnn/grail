@@ -5,7 +5,7 @@ members = ["crates/grail-stages", "crates/grail-gpu", "crates/grail"]
 [workspace.package]
 version = "0.1.0-beta.1"
 edition = "2021"
-license = "UNLICENSED"   # placeholder: licence not chosen yet (README, "Licence")
+license = "GPL-3.0-only"   # with a section 7 additional permission for libvship: LICENSE-EXCEPTION.md
 repository = ""
 
 [workspace.dependencies]

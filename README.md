@@ -299,8 +299,9 @@ memory for libvship, more kernel fusion in the features, and one pipeline stage 
 
 ## Licence
 
-**Not chosen yet (placeholder).** The licence for this repository will be decided by the owner; until then no
-licence is granted. (Cargo manifests say `UNLICENSED`.)
+GPL-3.0 (`LICENSE`), with an additional permission under section 7 (`LICENSE-EXCEPTION.md`): GRAILS may be combined
+with libvship, which has its own licence (MIT NON-AI License), and the combination conveyed. GRAILS loads libvship at
+run time and does not bundle it.
 
 ## Repository layout
 
