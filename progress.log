@@ -7,3 +7,6 @@
 16:18 HIP compile check: kernels/flowdegrain2.cu and grail.cu compile with hipcc (ROCm 7.2.4 container, gfx1100 + gfx90a), hipify-perl only adds the hip_runtime include; not run (no AMD GPU)
 16:23 stage traits in place (grail-stages; GPU backend implements them), exactness unchanged; next: NVDEC option for 4K references, bench script, README; GPU work ends 17:25; STUCK IF README not drafted by 18:15
 16:31 coordinator: my timing slot ~17:15-17:28 after its go (load < 3 first); whole-set subset must end by 17:10 (kill PID 3493491 if not); README in progress; STUCK IF whole-set log has no new case for 3 min
+16:37 libvship pairs overlapped with the features (helper threads); exactness unchanged; waiting for the whole-set subset (127/144) and the coordinator's go (~17:15) for the bench
+16:41 bench start (load 2.84); must end by 17:00
+16:42 bench done 16:42 (load 2.84 -> 5.35): 1080p full 24.7 / fast 41.7 fps; 4K sw 7.6 / 13.5; 4K NVDEC 8.6 / 16.9 (Python 13.8/22.4, 4.8/7.5, 5.3/8.8); whole-set subset 144 showings Spearman 0.999993, max |dQ| 0.0004; off the machine (pipeline agent's slot); next: README/docs only until told the machine is free

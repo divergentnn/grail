@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Lab tool: fills the README's exactness / whole-set / speed placeholders from the check and bench results.
 
-    readme_tables.py README.head.md SECTION.md results/ README.md
+    readme_tables.py tools/README.template.md tools/README.correlation.md results/ README.md
+(README.correlation.md: the lab's README_GRAIL_section.md, the two validation rounds labelled by film)
 """
 import json
 import sys
@@ -25,13 +26,14 @@ fast = json.loads((res / "check_fast.json").read_text()) if (res / "check_fast.j
 lines = ["| stage | worst error over the 13 cases |", "|---|---|"]
 for k, d in STAGES:
     v = w.get(k)
-    lines.append(f"| {d} | {'-' if v is None else ('%.1e' % v if v and v < 1e-3 else '%.4f' % v)} |")
+    cell = '-' if v is None else ('%d' % v if k in ('active', 'path') else ('%.1e' % v if v and v < 1e-3 else '%.4f' % v))
+    lines.append(f"| {d} | {cell} |")
 lines += ["", "| case | reference Q | port Q | dQ (full) | dQ (fast, vs the reference's fast inputs) |", "|---|---|---|---|---|"]
 fq = {r["key"]: r for r in (fast or {}).get("cases", [])}
+sg = lambda x: ("%+.4f" % x).replace("-0.0000", "0.0000").replace("+0.0000", "0.0000")
 for r in c["cases"]:
     f = fq.get(r["key"])
-    lines.append(f"| {r['case']} | {r['Q_ref']:.3f} | {r['Q_port']:.3f} | {r['dQ']:+.4f} | "
-                 f"{'%+.4f' % f['dQ'] if f else '-'} |")
+    lines.append(f"| {r['case']} | {r['Q_ref']:.3f} | {r['Q_port']:.3f} | {sg(r['dQ'])} | {sg(f['dQ']) if f else '-'} |")
 txt = txt.replace("EXACTNESS_TABLE", "\n".join(lines))
 ws = res / "whole_subset.json"
 if ws.exists():
@@ -74,6 +76,6 @@ if b.exists():
                  f"{'%.1fx' % (r['fps'] / p) if p else '-'} | {round(100 * r['decode_share'])} % |")
     L.append("")
     L.append(f"1-minute load at start {d['load_start'][0]}, at end {d['load_end'][0]}.")
-    txt = txt.replace("SPEED_SECTION", "SPEED_INTRO\n\n" + "\n".join(L))
+    txt = txt.replace("SPEED_SECTION", "\n".join(L))
 out.write_text(txt + "\n" + section.read_text())
 print("written", out)

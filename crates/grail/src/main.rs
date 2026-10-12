@@ -1,4 +1,5 @@
 //! grail: GRAILS, the grain- and line-art-aware quality score on the SSIMULACRA2 scale (beta).
+mod batch;
 mod check;
 mod decode;
 mod model;
@@ -22,11 +23,19 @@ enum Cmd {
     /// score an encode against its source
     Score {
         /// the source (reference)
-        #[arg(long = "ref")]
-        reference: PathBuf,
+        #[arg(long = "ref", required_unless_present = "batch")]
+        reference: Option<PathBuf>,
         /// the encode (candidate), decoded as it will be watched (AV1 film grain rendered full-frame)
-        #[arg(long)]
-        dist: PathBuf,
+        #[arg(long, required_unless_present = "batch")]
+        dist: Option<PathBuf>,
+        /// score many pairs: a JSON-lines file, one object per pair with "ref", "dist" and optionally "id", "start",
+        /// "dist_start", "frames", "crop", "dist_crop", "colour", "fast", "denoise_candidate" (the other options are
+        /// the defaults); writes one JSON line per pair (summary, or the full report with --json)
+        #[arg(long, conflicts_with_all = ["reference", "dist"])]
+        batch: Option<PathBuf>,
+        /// --batch: write the results here instead of stdout (pairs already in the file are skipped)
+        #[arg(long, requires = "batch")]
+        out: Option<PathBuf>,
         /// every 4th frame plus its successor; AV1 synthetic-grain candidates are not denoised
         #[arg(long)]
         fast: bool,
@@ -113,7 +122,19 @@ fn parse_hwdec(s: &str) -> Result<score::HwDec> {
     })
 }
 
-fn parse_rect(s: &str) -> Result<[usize; 4]> {
+pub fn parse_colour(s: &str) -> Result<vship::Colour> {
+    Ok(match s {
+        "sdr" | "bt709" => vship::Colour::Sdr,
+        "pq" | "hdr10" => vship::Colour::Pq,
+        x => bail!("colour: sdr or pq, not {x}"),
+    })
+}
+
+pub fn parse_crop(s: &str) -> Result<score::Crop> {
+    Ok(if s == "auto" { score::Crop::Auto } else { score::Crop::Rect(parse_rect(s)?) })
+}
+
+pub fn parse_rect(s: &str) -> Result<[usize; 4]> {
     let v: Vec<usize> = s.split(',').map(|x| x.trim().parse()).collect::<Result<_, _>>()?;
     if v.len() != 4 {
         bail!("expected x,y,w,h: {s}");
@@ -132,30 +153,28 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
     let model = model::Model::builtin();
     match cli.cmd {
-        Cmd::Score { reference, dist, fast, denoise_candidate, start, dist_start, frames, crop, dist_crop, colour,
-                     fullgrain_lib, threads, json, timings, siting_left, hwdec } => {
+        Cmd::Score { reference, dist, batch, out, fast, denoise_candidate, start, dist_start, frames, crop, dist_crop,
+                     colour, fullgrain_lib, threads, json, timings, siting_left, hwdec } => {
             let o = score::Opts {
-                reference,
-                dist,
+                reference: reference.unwrap_or_default(),
+                dist: dist.unwrap_or_default(),
                 fast,
                 denoise_candidate,
                 start,
                 dist_start,
                 frames,
-                crop: if crop == "auto" { score::Crop::Auto } else { score::Crop::Rect(parse_rect(&crop)?) },
+                crop: parse_crop(&crop)?,
                 dist_crop: dist_crop.map(|s| parse_rect(&s)).transpose()?,
-                colour: match colour.as_deref() {
-                    None => None,
-                    Some("sdr") | Some("bt709") => Some(vship::Colour::Sdr),
-                    Some("pq") | Some("hdr10") => Some(vship::Colour::Pq),
-                    Some(x) => bail!("--colour: sdr or pq, not {x}"),
-                },
+                colour: colour.as_deref().map(parse_colour).transpose()?,
                 fullgrain_lib,
                 threads,
                 timings,
                 siting_left,
                 hwdec: parse_hwdec(&hwdec)?,
             };
+            if let Some(list) = batch {
+                return batch::run(&list, out.as_deref(), &o, json, &model);
+            }
             let backend = grail_gpu::GpuBackend::new()?;
             let r = score::score(&o, &model, &backend)?;
             if json {
