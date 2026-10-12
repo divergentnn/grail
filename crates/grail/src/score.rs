@@ -432,6 +432,7 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         vs.ssimu2(w, h, colour, (crate::vship::chroma_loc(&pr.chroma_location), crate::vship::chroma_loc(&pd.chroma_location)))?
     };
     let ss = vs.ssimu2(w, h, colour, (0, 0))?;
+    let ss2 = vs.ssimu2(w, h, colour, (0, 0))?;
     tm.insert("init".into(), t_init.elapsed().as_secs_f64());
 
     let rsrc = if keep && !mem.is_empty() { Source::Mem(mem) } else { Source::Live(Decoder::start(rspec, 8)?) };
@@ -474,27 +475,41 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
             ng_win.set(st.take_window(dfirst + t)?);
         }
         t_den += tt.elapsed().as_secs_f64();
+        // the SSIMULACRA2 pairs (libvship, its own GPU work and host conversions) run on helper threads while the
+        // grain features and line-art measures run here
         let tt = Instant::now();
         pf.frame.push(t);
-        pf.ssimulacra2.push(ss0.score(&s_win.host, &c_win.host)?);
-        if denoise_cand {
-            pf.s_d.push(ss.score(&ds_win.host, &dc_win.host)?);
-        }
-        if synth {
-            pf.s_dp.push(ss.score(&ds_win.host, &ng_win.host)?);
-        }
-        t_metric += tt.elapsed().as_secs_f64();
-        let tt = Instant::now();
         let consecutive = last.map(|l| l + 1 == t).unwrap_or(false);
-        let ff = if denoise_cand {
-            FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut dc_win,
-                           cng: if synth { Some(&mut ng_win) } else { None } }
-        } else {
-            FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut ng_win, cng: None }
-        };
-        feats.frame(ff, consecutive)?;
+        let (hs, hc, hds, hdc, hng) = (s_win.host.clone(), c_win.host.clone(), ds_win.host.clone(), dc_win.host.clone(),
+                                       ng_win.host.clone());
+        let (ss0r, ssr, ss2r) = (&ss0, &ss, &ss2);
+        let (scores, feat_res, t_f) = std::thread::scope(|sc| {
+            let a = sc.spawn(move || ss0r.score(&hs, &hc));
+            let b = denoise_cand.then(|| { let (x, y) = (hds.clone(), hdc); sc.spawn(move || ssr.score(&x, &y)) });
+            let c = synth.then(|| sc.spawn(move || ss2r.score(&hds, &hng)));
+            let tf = Instant::now();
+            let ff = if denoise_cand {
+                FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut dc_win,
+                               cng: if synth { Some(&mut ng_win) } else { None } }
+            } else {
+                FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut ng_win, cng: None }
+            };
+            let fr = feats.frame(ff, consecutive);
+            let t_f = tf.elapsed().as_secs_f64();
+            let j = |h: std::thread::ScopedJoinHandle<'_, Result<f64>>| h.join().unwrap_or_else(|_| Err(anyhow::anyhow!("libvship thread panicked")));
+            (( j(a), b.map(j), c.map(j)), fr, t_f)
+        });
+        feat_res?;
+        pf.ssimulacra2.push(scores.0?);
+        if let Some(x) = scores.1 {
+            pf.s_d.push(x?);
+        }
+        if let Some(x) = scores.2 {
+            pf.s_dp.push(x?);
+        }
         last = Some(t);
-        t_feat += tt.elapsed().as_secs_f64();
+        t_feat += t_f;
+        t_metric += tt.elapsed().as_secs_f64() - t_f;
         let tt = Instant::now();
         if t % 4 == 0 {
             let d = la.detect(&mut s_win)?;

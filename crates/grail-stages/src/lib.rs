@@ -3,13 +3,15 @@
 //! `Backend`; nothing else in the pipeline changes. Frames are 10-bit 4:2:0, planes Y, U, V, as flat u16 slices.
 use anyhow::Result;
 use std::any::Any;
+use std::sync::Arc;
 
 pub const NB: usize = 8;
 
 /// one window frame: always on the host; a backend may attach its own copy (device memory) once per frame so that
-/// several stages share one upload. `stale` marks a host change that the attached copy does not have yet.
+/// several stages share one upload. `stale` marks a host change that the attached copy does not have yet. The host
+/// data is shared (Arc) so that a metric can read it on another thread while a stage attaches its copy.
 pub struct Win {
-    pub host: Vec<u16>,
+    pub host: Arc<Vec<u16>>,
     pub w: usize,
     pub h: usize,
     pub attached: Option<Box<dyn Any>>,
@@ -18,11 +20,15 @@ pub struct Win {
 
 impl Win {
     pub fn new(w: usize, h: usize) -> Win {
-        Win { host: vec![0; w * h * 3 / 2], w, h, attached: None, stale: true }
+        Win { host: Arc::new(vec![0; w * h * 3 / 2]), w, h, attached: None, stale: true }
+    }
+    /// mutable host data (copied first if a reader still holds it)
+    pub fn host_mut(&mut self) -> &mut Vec<u16> {
+        Arc::make_mut(&mut self.host)
     }
     pub fn set(&mut self, data: Vec<u16>) {
         debug_assert_eq!(data.len(), self.w * self.h * 3 / 2);
-        self.host = data;
+        self.host = Arc::new(data);
         self.stale = true;
     }
 }

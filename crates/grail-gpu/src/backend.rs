@@ -80,13 +80,14 @@ impl Denoise for GpuDenoise {
         }
         let src = self.orig.as_ref().unwrap();
         src.write(orig)?;
-        out.host.resize(n, 0);
+        out.host_mut().resize(n, 0);
         out.stale = false;
         let dst = dev(out)?;
         launch_n("cut_window", n, args![&self.out, act[2] as i32, act[3] as i32, src, win[0] as i32, win[1] as i32,
                                         w as i32, h as i32, act[0] as i32, act[1] as i32, dst])?;
         let b = out.attached.as_ref().unwrap().downcast_ref::<DBuf>().unwrap();
-        b.read(&mut out.host)?;
+        let host: &mut Vec<u16> = std::sync::Arc::make_mut(&mut out.host);
+        b.read(host.as_mut_slice())?;
         out.stale = false;
         Ok(t)
     }
