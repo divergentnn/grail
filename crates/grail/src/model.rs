@@ -189,3 +189,79 @@ pub fn lineart_confidence(m: &Model, inkflat_s: f64, tex6: f64) -> f64 {
 pub fn lineart_penalty(m: &Model, peak: f64) -> f64 {
     (peak.max(0.0).sqrt() - m.la_tau).max(0.0)
 }
+
+#[cfg(test)]
+mod tests {
+    //! The model on the reference's own features (no GPU, no media): penalties, structure and Q of the 13
+    //! port_reference cases must match the Python reference to rounding.
+    use super::*;
+    use serde_json::Value;
+
+    fn feats(x: &Value) -> Feats {
+        let vv = |k: &str| -> Vec<Vec<f64>> {
+            x[k].as_array().unwrap().iter().map(|r| r.as_array().unwrap().iter().map(|y| y.as_f64().unwrap()).collect()).collect()
+        };
+        let v1 = |k: &str| -> Vec<f64> { x[k].as_array().unwrap().iter().map(|y| y.as_f64().unwrap()).collect() };
+        Feats {
+            sigma_g: x["sigma_g"].as_f64().unwrap(),
+            flat_frac: x["flat_frac"].as_f64().unwrap(),
+            p_s: vv("P_s"),
+            p_c: vv("P_c"),
+            n_lum: v1("n_lum"),
+            chroma_s: v1("chroma_s"),
+            chroma_c: v1("chroma_c"),
+            stick_s: x["stick_s"].as_f64(),
+            stick_c: x["stick_c"].as_f64(),
+            stickc_s: x["stickc_s"].as_f64(),
+            stickc_c: x["stickc_c"].as_f64(),
+            tex_energy_ratio: x["tex_energy_ratio"].as_f64(),
+            p_ng: None,
+        }
+    }
+
+    #[test]
+    fn reference_cases_model_level() {
+        let d: Value = serde_json::from_str(include_str!("../tests/data/port_reference_model.json")).unwrap();
+        let m = Model::builtin();
+        for c in d["cases"].as_array().unwrap() {
+            let name = c["case"].as_str().unwrap();
+            let f = feats(&c["features"]);
+            let pen = penalties(&f);
+            for (t, v) in c["penalties"].as_object().unwrap() {
+                if let Some(mine) = pen.get(t) {
+                    assert!((mine - v.as_f64().unwrap()).abs() < 1e-9, "{name}: penalty {t} {mine} vs {v}");
+                }
+            }
+            let wsum: f64 = m.terms.iter().zip(&m.weights).map(|(t, w)| w * pen.get(t).copied().unwrap_or(0.0)).sum();
+            assert!((wsum - c["weighted_penalty_sum"].as_f64().unwrap()).abs() < 1e-9, "{name}: weighted sum");
+            let synth = c["features"]["path"].as_str() == Some("synth");
+            let r = c["S_Dp"].as_f64().map(|_| c["grain_capture_R"].as_f64().unwrap());
+            let (st, path) = structure(&m, f.sigma_g, synth, r, c["S_D"].as_f64(), c["S_Dp"].as_f64());
+            assert_eq!(path, c["path_used"].as_str().unwrap(), "{name}: path");
+            assert!((st - c["S_struct"].as_f64().unwrap()).abs() < 1e-9, "{name}: S_struct {st}");
+            let g = smoothstep(f.sigma_g, m.sig.0, m.sig.1);
+            assert!((g - c["g"].as_f64().unwrap()).abs() < 1e-12, "{name}: g");
+            let s0 = c["S0_ssimulacra2"].as_f64().unwrap();
+            let mut q = s0 + g * (st - s0 - wsum);
+            let la = &c["lineart"];
+            let a = lineart_confidence(&m, la["inkflat_s"].as_f64().unwrap_or(0.0), la["tex6"].as_f64().unwrap_or(0.0));
+            assert!((a - la["a"].as_f64().unwrap()).abs() < 1e-12, "{name}: a");
+            if a > 0.0 {
+                let peak = la["near_top_frames"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).fold(0.0, f64::max);
+                q -= (1.0 - g) * a * m.la_w * lineart_penalty(&m, peak);
+            }
+            assert!((q - c["Q"].as_f64().unwrap()).abs() < 1e-9, "{name}: Q {q} vs {}", c["Q"]);
+            assert!(q <= 100.0);
+        }
+    }
+
+    #[test]
+    fn no_grain_no_line_art_is_ssimulacra2_exactly() {
+        let m = Model::builtin();
+        let s0 = 73.123456789;
+        let g = smoothstep(0.2, m.sig.0, m.sig.1);
+        assert_eq!(g, 0.0);
+        let q = s0 + g * (91.0 - s0 - 12.5);
+        assert_eq!(q.to_bits(), s0.to_bits());
+    }
+}

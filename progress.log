@@ -6,3 +6,4 @@
 16:17 whole-set subset check started (every 4th of 574 showings, ~144 cases, PID 3493491); ETA 17:10; STUCK IF results/whole_subset.log has no new case line for 3 min
 16:18 HIP compile check: kernels/flowdegrain2.cu and grail.cu compile with hipcc (ROCm 7.2.4 container, gfx1100 + gfx90a), hipify-perl only adds the hip_runtime include; not run (no AMD GPU)
 16:23 stage traits in place (grail-stages; GPU backend implements them), exactness unchanged; next: NVDEC option for 4K references, bench script, README; GPU work ends 17:25; STUCK IF README not drafted by 18:15
+16:31 coordinator: my timing slot ~17:15-17:28 after its go (load < 3 first); whole-set subset must end by 17:10 (kill PID 3493491 if not); README in progress; STUCK IF whole-set log has no new case for 3 min
