@@ -115,8 +115,8 @@ grail score --ref SOURCE --dist ENCODE [--fast [--denoise-candidate]] [--start N
 - `--crop x,y,w,h`: score this window (even coordinates, in source pixels). Default `auto`: the active picture (black
   bars removed). The denoiser always sees the whole active picture; the window is cut out afterwards. If the encode
   is the window itself (a crop encode), it is detected by its size; `--dist-crop` overrides.
-- `--fast`: every 4th frame plus its successor; AV1 synthetic-grain encodes are not denoised. About 1.6x faster in
-  the Python reference, same agreement with the verdicts, but up to 20 points off on heavy, coarse grain.
+- `--fast`: every 4th frame plus its successor; AV1 synthetic-grain encodes are not denoised. 1.7-2.0x faster
+  (table under "Speed"), same agreement with the verdicts, but up to 20 points off on heavy, coarse grain.
   `--fast --denoise-candidate` keeps the denoise (frame subsampling only): use it, or the full mode, as an encode
   target on heavy grain.
 - `--json`: everything, including per-frame SSIMULACRA2, structure and line-art values and the stage timings.
