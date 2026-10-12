@@ -60,12 +60,15 @@ enum Cmd {
         /// JSON output with per-frame values
         #[arg(long)]
         json: bool,
-        /// synchronize the GPU between stages to time them (slightly slower)
+        /// print the time per stage
         #[arg(long)]
         timings: bool,
         /// plain SSIMULACRA2 with chroma siting "left" on both sides instead of each file's own siting
         #[arg(long)]
         siting_left: bool,
+        /// hardware decode: auto (NVDEC above 2048 px width for non-AV1 streams), none, cuda
+        #[arg(long, default_value = "auto")]
+        hwdec: String,
     },
     /// the measurement denoiser alone (flowdegrain2 at GRAIL's settings): 10-bit 4:2:0 y4m in, y4m out ("-" = stdio)
     Denoise {
@@ -87,6 +90,9 @@ enum Cmd {
         /// write the comparison as JSON
         #[arg(long)]
         out: Option<PathBuf>,
+        /// hardware decode: none (default here: the reference decoded in software), auto, cuda
+        #[arg(long, default_value = "none")]
+        hwdec: String,
         /// only every N-th case (with --offset)
         #[arg(long, default_value_t = 1)]
         every: usize,
@@ -96,6 +102,15 @@ enum Cmd {
         #[arg(long)]
         fast_variants: Option<String>,
     },
+}
+
+fn parse_hwdec(s: &str) -> Result<score::HwDec> {
+    Ok(match s {
+        "auto" => score::HwDec::Auto,
+        "none" | "sw" | "software" => score::HwDec::None,
+        "cuda" | "nvdec" => score::HwDec::Cuda,
+        x => bail!("--hwdec: auto, none or cuda, not {x}"),
+    })
 }
 
 fn parse_rect(s: &str) -> Result<[usize; 4]> {
@@ -118,7 +133,7 @@ fn run() -> Result<()> {
     let model = model::Model::builtin();
     match cli.cmd {
         Cmd::Score { reference, dist, fast, denoise_candidate, start, dist_start, frames, crop, dist_crop, colour,
-                     fullgrain_lib, threads, json, timings, siting_left } => {
+                     fullgrain_lib, threads, json, timings, siting_left, hwdec } => {
             let o = score::Opts {
                 reference,
                 dist,
@@ -139,17 +154,19 @@ fn run() -> Result<()> {
                 threads,
                 timings,
                 siting_left,
+                hwdec: parse_hwdec(&hwdec)?,
             };
             let backend = grail_gpu::GpuBackend::new()?;
             let r = score::score(&o, &model, &backend)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&r)?);
             } else {
-                print_text(&r);
+                print_text(&r, o.timings);
             }
         }
         Cmd::Denoise { input, output } => denoise_y4m(&input, &output)?,
-        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, every, offset, fast_variants } => {
+        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, every, offset, fast_variants, hwdec } => {
+            check::set_hwdec(parse_hwdec(&hwdec)?);
             match fast_variants {
                 Some(v) => check::run_fast(&file, &v, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model,
                                            &grail_gpu::GpuBackend::new()?)?,
@@ -161,7 +178,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn print_text(r: &score::Report) {
+fn print_text(r: &score::Report, timings: bool) {
     println!("{} {:.2}  ({} mode, GRAIL model {}, grail {})", r.flavour, r.score, r.mode, r.grail_version, r.tool_version);
     println!("  SSIMULACRA2       {:8.2}", r.ssimulacra2);
     println!("  structure         {:8.2}  (path {})", r.structure, r.path);
@@ -171,6 +188,13 @@ fn print_text(r: &score::Report) {
     if r.std_decoder.seed_frames > 0 {
         println!("  standard-decoder seed view (uncalibrated): mean percentile {:.1}, overlap share {:.3}",
                  r.std_decoder.seed_pct_mean.unwrap_or(f64::NAN), r.std_decoder.seed_overlap_share.unwrap_or(f64::NAN));
+    }
+    if timings {
+        for (k, v) in &r.timings {
+            println!("  time {k:24} {v:7.2} s");
+        }
+        println!("  {:.1} frames/s ({} frames, {} scored, GPU {})", r.frames as f64 / r.timings["total"], r.frames,
+                 r.frames_scored, r.gpu);
     }
 }
 

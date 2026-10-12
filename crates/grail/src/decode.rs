@@ -85,6 +85,8 @@ pub struct DecodeSpec {
     pub crop: Option<[usize; 4]>,
     pub grain: Grain,
     pub threads: usize,
+    /// NVDEC (ffmpeg -hwaccel cuda; frames come back to system memory)
+    pub hwaccel: bool,
     /// frame size of the output (crop or the whole frame)
     pub w: usize,
     pub h: usize,
@@ -122,6 +124,9 @@ impl Decoder {
         let mut cmd = Command::new("ffmpeg");
         cmd.args(["-hide_banner", "-nostats", "-nostdin", "-v", if showinfo { "info" } else { "error" }]);
         cmd.args(["-threads", &spec.threads.to_string()]);
+        if spec.hwaccel {
+            cmd.args(["-hwaccel", "cuda"]);
+        }
         if spec.av1 {
             cmd.args(["-c:v", "libdav1d"]);
         }

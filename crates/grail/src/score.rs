@@ -42,6 +42,16 @@ pub struct Opts {
     /// plain pair with chroma siting left on both sides (as the reference's in-process libvship calls) instead of
     /// each file's siting (as FFVship, the reference's full-mode S0)
     pub siting_left: bool,
+    pub hwdec: HwDec,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HwDec {
+    /// NVDEC for non-AV1 streams wider than 2048 px (4K HEVC: NVDEC 167 frames/s vs software 41), software otherwise
+    Auto,
+    None,
+    /// NVDEC for every non-AV1 stream (AV1 stays on dav1d: full-frame grain needs it)
+    Cuda,
 }
 
 #[derive(Clone, Debug, Serialize, Default)]
@@ -88,6 +98,8 @@ pub struct Report {
     pub grain_capture_r: Option<f64>,
     pub penalties: BTreeMap<String, f64>,
     pub features: Feats,
+    /// frames of the window (fast mode scores a subset of them)
+    pub frames: usize,
     pub frames_scored: usize,
     pub window: [usize; 4],
     pub dist_window: [usize; 4],
@@ -325,11 +337,54 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     let denoise_cand = !o.fast || o.denoise_candidate || !synth;
     let threads = o.threads.max(1);
 
-    // reference: decode all frames for the active-picture scan (kept in memory within the budget)
+    let hw = |p: &Probe| p.codec != "av1" && match o.hwdec {
+        HwDec::None => false,
+        HwDec::Cuda => true,
+        HwDec::Auto => p.width > 2048,
+    };
+    // host memory for decoded frames: the reference's frames are kept for the active-picture scan up to this budget
+    // (else the reference is decoded twice); each candidate queue holds at most 1/4 of it (and 48 frames)
+    let budget: usize = std::env::var("GRAIL_MEM_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(4096) << 20;
+    // the candidate's window is known before the reference's scan when the window is given
+    let dist_window = |win: [usize; 4]| -> Result<[usize; 4]> {
+        let (w, h) = (win[2], win[3]);
+        let dwin = match o.dist_crop {
+            Some(c) => c,
+            None if (pd.width, pd.height) == (pr.width, pr.height) => win,
+            None if (pd.width, pd.height) == (w, h) => [0, 0, w, h],
+            None => bail!("candidate is {}x{}, reference {}x{}: pass --dist-crop", pd.width, pd.height, pr.width, pr.height),
+        };
+        if dwin[2] != w || dwin[3] != h || dwin[0] + w > pd.width || dwin[1] + h > pd.height {
+            bail!("candidate window {:?} does not fit (window {w}x{h}, candidate {}x{})", dwin, pd.width, pd.height);
+        }
+        Ok(dwin)
+    };
+    let early_dwin = match o.crop {
+        Crop::Rect(r) => Some(dist_window(r)?),
+        Crop::Auto => None,
+    };
+    // candidate decoders start first and run while the reference is scanned (queues sized by the memory budget)
     let t0 = Instant::now();
+    let dgrain = match &fg_lib {
+        Some(l) => Grain::FullFrame(l.clone()),
+        None => Grain::Plain,
+    };
+    let ccrop = if denoise_cand { None } else { early_dwin };
+    let (cw, ch) = match ccrop { Some(c) => (c[2], c[3]), None => (pd.width, pd.height) };
+    let q = |w: usize, h: usize| ((budget / 4) / (w * h * 3)).clamp(8, 48).min(db - da + 1);
+    let cdec = Decoder::start(DecodeSpec { path: o.dist.clone(), av1: pd.codec == "av1", a: da, b: db, crop: ccrop,
+                                           grain: dgrain, threads, hwaccel: hw(&pd), w: cw, h: ch },
+                              q(cw, ch))?;
+    let ngdec = if synth {
+        let (nw, nh) = match early_dwin { Some(c) => (c[2], c[3]), None => (pd.width, pd.height) };
+        Some(Decoder::start(DecodeSpec { path: o.dist.clone(), av1: true, a: da, b: db, crop: early_dwin,
+                                         grain: Grain::Off, threads, hwaccel: false, w: nw, h: nh }, q(nw, nh))?)
+    } else {
+        None
+    };
+    // reference: all frames for the active-picture scan (kept in memory within the budget, else decoded again)
     let rspec = DecodeSpec { path: o.reference.clone(), av1: pr.codec == "av1", a: ra, b: rb, crop: None,
-                             grain: Grain::Plain, threads, w: pr.width, h: pr.height };
-    let budget: usize = std::env::var("GRAIL_MEM_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(6000) << 20;
+                             grain: Grain::Plain, threads, hwaccel: hw(&pr), w: pr.width, h: pr.height };
     let fbytes = pr.width * pr.height * 3;
     let mut scan = ActiveScan::new(pr.width, pr.height);
     let mut mem: VecDeque<Vec<u16>> = VecDeque::new();
@@ -358,15 +413,10 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     if win.iter().any(|v| v % 2 == 1) || win[0] + w > pr.width || win[1] + h > pr.height || w < 64 || h < 64 {
         bail!("window {:?} must be even, at least 64x64 and inside the {}x{} reference", win, pr.width, pr.height);
     }
-    let dwin = match o.dist_crop {
-        Some(c) => c,
-        None if (pd.width, pd.height) == (pr.width, pr.height) => win,
-        None if (pd.width, pd.height) == (w, h) => [0, 0, w, h],
-        None => bail!("candidate is {}x{}, reference {}x{}: pass --dist-crop", pd.width, pd.height, pr.width, pr.height),
+    let dwin = match early_dwin {
+        Some(d) => d,
+        None => dist_window(win)?,
     };
-    if dwin[2] != w || dwin[3] != h || dwin[0] + w > pd.width || dwin[1] + h > pd.height {
-        bail!("candidate window {:?} does not fit (window {w}x{h}, candidate {}x{})", dwin, pd.width, pd.height);
-    }
     let dact = even_box([ract[0] as i64 + dwin[0] as i64 - win[0] as i64, ract[1] as i64 + dwin[1] as i64 - win[1] as i64,
                          ract[2] as i64, ract[3] as i64], pd.width, pd.height);
     let sc = if pr.height > 1600 { 2.0 } else { 1.0 };
@@ -389,26 +439,16 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         src: rsrc, fw: pr.width, fh: pr.height, act: ract, win, den: Some(backend.denoiser(ract[2], ract[3])?),
         pushed: 0, total: rb - ra, windows: VecDeque::new(), wait: 0.0, full: true,
     };
-    let dgrain = match &fg_lib {
-        Some(l) => Grain::FullFrame(l.clone()),
-        None => Grain::Plain,
-    };
-    let dspec = DecodeSpec { path: o.dist.clone(), av1: pd.codec == "av1", a: da, b: db,
-                             crop: if denoise_cand { None } else { Some(dwin) }, grain: dgrain, threads,
-                             w: if denoise_cand { pd.width } else { w }, h: if denoise_cand { pd.height } else { h } };
+    let cfull = ccrop.is_none();
     let mut cstream = Stream {
-        src: Source::Live(Decoder::start(dspec, 8)?), fw: pd.width, fh: pd.height, act: dact, win: dwin,
+        src: Source::Live(cdec), fw: pd.width, fh: pd.height, act: dact, win: dwin,
         den: if denoise_cand { Some(backend.denoiser(dact[2], dact[3])?) } else { None },
-        pushed: 0, total: db - da, windows: VecDeque::new(), wait: 0.0, full: denoise_cand,
+        pushed: 0, total: db - da, windows: VecDeque::new(), wait: 0.0, full: cfull,
     };
-    let mut ngstream = if synth {
-        let spec = DecodeSpec { path: o.dist.clone(), av1: true, a: da, b: db, crop: Some(dwin), grain: Grain::Off,
-                                threads, w, h };
-        Some(Stream { src: Source::Live(Decoder::start(spec, 8)?), fw: w, fh: h, act: [0, 0, w, h], win: [0, 0, w, h],
-                      den: None, pushed: 0, total: db - da, windows: VecDeque::new(), wait: 0.0, full: false })
-    } else {
-        None
-    };
+    let mut ngstream = ngdec.map(|d| Stream {
+        src: Source::Live(d), fw: pd.width, fh: pd.height, act: [0, 0, w, h], win: dwin, den: None, pushed: 0,
+        total: db - da, windows: VecDeque::new(), wait: 0.0, full: early_dwin.is_none(),
+    });
 
     let mut feats = backend.features(w, h, sc)?;
     let mut la = backend.lineart(w, h)?;
@@ -532,6 +572,7 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         grain_capture_r: r,
         penalties: pen,
         features: ft,
+        frames: n,
         frames_scored: scored.len(),
         window: win,
         dist_window: dwin,

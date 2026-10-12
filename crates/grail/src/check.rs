@@ -9,6 +9,12 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+static HWDEC: std::sync::Mutex<score::HwDec> = std::sync::Mutex::new(score::HwDec::None);
+
+pub fn set_hwdec(h: score::HwDec) {
+    *HWDEC.lock().unwrap() = h;
+}
+
 /// (stage, tolerance, description)
 const STAGES: &[(&str, f64, &str)] = &[
     ("S0", 0.05, "plain SSIMULACRA2, window mean (decode + libvship)"),
@@ -110,6 +116,7 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
             threads,
             timings: false,
             siting_left: false,
+            hwdec: *HWDEC.lock().unwrap(),
         };
         eprintln!("case {name} ({})", c["key"].as_str().unwrap_or(""));
         let t0 = std::time::Instant::now();
@@ -314,6 +321,7 @@ pub fn run_fast(file: &Path, variants: &str, only: Option<&str>, fg: Option<Path
             threads,
             timings: false,
             siting_left: true,       // variants.py scored the plain pair in-process (vship_api: left on both sides)
+            hwdec: *HWDEC.lock().unwrap(),
         };
         eprintln!("case {name} ({key}) fast");
         let t0 = std::time::Instant::now();

@@ -5,3 +5,4 @@
 16:16 denoiser bit-exact vs flowdegrain2.py (1080p 24 frames, 4K 16 frames, every sample); fast mode matches the reference's fast inputs on 13 cases (max |dQ| 0.0004); next: whole-set subset check, README, HIP container; GPU work stops 17:25; STUCK IF no whole-set result by 17:20
 16:17 whole-set subset check started (every 4th of 574 showings, ~144 cases, PID 3493491); ETA 17:10; STUCK IF results/whole_subset.log has no new case line for 3 min
 16:18 HIP compile check: kernels/flowdegrain2.cu and grail.cu compile with hipcc (ROCm 7.2.4 container, gfx1100 + gfx90a), hipify-perl only adds the hip_runtime include; not run (no AMD GPU)
+16:23 stage traits in place (grail-stages; GPU backend implements them), exactness unchanged; next: NVDEC option for 4K references, bench script, README; GPU work ends 17:25; STUCK IF README not drafted by 18:15
