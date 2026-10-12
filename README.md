@@ -229,7 +229,7 @@ subsample) on the same 13 cases with |dQ| <= 0.0004.
 Hardware decoding (NVDEC) of the non-AV1 sources and encodes gives the same scores as software decoding (13 cases,
 identical).
 
-Whole-set check (PORT_SPEC gate: Spearman >= 0.995): every 4th of the 574 judged showings (144 showings, 13 films, full mode): Spearman between the port's and the reference's Q 0.999993; |dQ| median 1.6e-07, max 0.0004; 0 failed to run.
+Whole-set check (PORT_SPEC gate: Spearman >= 0.995): every 4th (144) of the 574 judged showings (13 films, full mode): Spearman between the port's and the reference's Q 0.999993; |dQ| median 1.6e-07, max 0.0004; 0 failed to run.
 
 ## Speed
 

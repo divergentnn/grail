@@ -35,10 +35,14 @@ for r in c["cases"]:
     f = fq.get(r["key"])
     lines.append(f"| {r['case']} | {r['Q_ref']:.3f} | {r['Q_port']:.3f} | {sg(r['dQ'])} | {sg(f['dQ']) if f else '-'} |")
 txt = txt.replace("EXACTNESS_TABLE", "\n".join(lines))
-ws = res / "whole_subset.json"
-if ws.exists():
-    d = json.loads(ws.read_text())
-    rows = d["cases"]
+wfiles = [f for f in [res / "whole_subset.json", *sorted(res.glob("whole_rest_*.json"))] if f.exists()]
+if wfiles:
+    rows, fails = [], []
+    for f in wfiles:
+        d = json.loads(f.read_text())
+        rows += d["cases"]
+        fails += d.get("failures", [])
+    d = {"cases": rows, "failures": fails}
     dq = sorted(abs(r["dQ"]) for r in rows)
     import statistics
     qa = [r["Q_ref"] for r in rows]; qb = [r["Q_port"] for r in rows]
@@ -58,8 +62,9 @@ if ws.exists():
     sp = sum((x - ma) * (y - mb) for x, y in zip(ra, rb)) / (sum((x - ma) ** 2 for x in ra) * sum((y - mb) ** 2 for y in rb)) ** 0.5
     nf = len(d.get("failures", []))
     films = sorted({r["case"] for r in rows})
-    txt = txt.replace("WHOLESET_LINE", f"Whole-set check (PORT_SPEC gate: Spearman >= 0.995): every 4th of the 574 judged showings ({len(rows)} "
-                      f"showings, {len(films)} films, full mode): Spearman between the port's and the reference's Q "
+    part = "all" if len(rows) + nf >= 574 else f"every 4th ({len(rows)})"
+    txt = txt.replace("WHOLESET_LINE", f"Whole-set check (PORT_SPEC gate: Spearman >= 0.995): {part} of the 574 judged showings "
+                      f"({len(films)} films, full mode): Spearman between the port's and the reference's Q "
                       f"{sp:.6f}; |dQ| median {dq[len(dq)//2]:.1e}, max {dq[-1]:.4f}; {nf} failed to run.")
 else:
     txt = txt.replace("WHOLESET_LINE\n", "")
