@@ -63,6 +63,14 @@ enum Cmd {
         /// synchronize the GPU between stages to time them (slightly slower)
         #[arg(long)]
         timings: bool,
+        /// plain SSIMULACRA2 with chroma siting "left" on both sides instead of each file's own siting
+        #[arg(long)]
+        siting_left: bool,
+    },
+    /// the measurement denoiser alone (flowdegrain2 at GRAIL's settings): 10-bit 4:2:0 y4m in, y4m out ("-" = stdio)
+    Denoise {
+        input: PathBuf,
+        output: PathBuf,
     },
     /// run the cases of the Python reference's port_reference.json and compare every intermediate value
     CheckReference {
@@ -79,6 +87,9 @@ enum Cmd {
         /// write the comparison as JSON
         #[arg(long)]
         out: Option<PathBuf>,
+        /// fast mode, compared with the reference's fast-mode inputs (variants*.jsonl, comma-separated)
+        #[arg(long)]
+        fast_variants: Option<String>,
     },
 }
 
@@ -102,7 +113,7 @@ fn run() -> Result<()> {
     let model = model::Model::builtin();
     match cli.cmd {
         Cmd::Score { reference, dist, fast, denoise_candidate, start, dist_start, frames, crop, dist_crop, colour,
-                     fullgrain_lib, threads, json, timings } => {
+                     fullgrain_lib, threads, json, timings, siting_left } => {
             let o = score::Opts {
                 reference,
                 dist,
@@ -122,6 +133,7 @@ fn run() -> Result<()> {
                 fullgrain_lib,
                 threads,
                 timings,
+                siting_left,
             };
             let r = score::score(&o, &model)?;
             if json {
@@ -130,8 +142,12 @@ fn run() -> Result<()> {
                 print_text(&r);
             }
         }
-        Cmd::CheckReference { file, only, fullgrain_lib, threads, out } => {
-            check::run(&file, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model)?;
+        Cmd::Denoise { input, output } => denoise_y4m(&input, &output)?,
+        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, fast_variants } => {
+            match fast_variants {
+                Some(v) => check::run_fast(&file, &v, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model)?,
+                None => check::run(&file, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model)?,
+            }
         }
     }
     Ok(())
@@ -148,4 +164,58 @@ fn print_text(r: &score::Report) {
         println!("  standard-decoder seed view (uncalibrated): mean percentile {:.1}, overlap share {:.3}",
                  r.std_decoder.seed_pct_mean.unwrap_or(f64::NAN), r.std_decoder.seed_overlap_share.unwrap_or(f64::NAN));
     }
+}
+
+fn denoise_y4m(input: &std::path::Path, output: &std::path::Path) -> Result<()> {
+    use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+    let rd: Box<dyn Read> = if input.as_os_str() == "-" { Box::new(std::io::stdin()) } else { Box::new(std::fs::File::open(input)?) };
+    let wr: Box<dyn Write> = if output.as_os_str() == "-" { Box::new(std::io::stdout()) } else { Box::new(std::fs::File::create(output)?) };
+    let mut rd = BufReader::with_capacity(1 << 22, rd);
+    let mut wr = BufWriter::with_capacity(1 << 22, wr);
+    let mut hdr = String::new();
+    rd.read_line(&mut hdr)?;
+    if !hdr.starts_with("YUV4MPEG2 ") {
+        bail!("input must be y4m");
+    }
+    let tag = |c: char| hdr.split_whitespace().find(|t| t.starts_with(c)).map(|t| t[1..].to_string());
+    if tag('C').as_deref() != Some("420p10") {
+        bail!("only C420p10 y4m is supported");
+    }
+    let w: usize = tag('W').unwrap_or_default().parse()?;
+    let h: usize = tag('H').unwrap_or_default().parse()?;
+    let g = grail_gpu::try_init()?;
+    g.bind_thread()?;
+    let mut den = grail_gpu::denoise::Denoiser::new(w, h)?;
+    let out = grail_gpu::DBuf::new(w * h * 3)?;
+    let mut host = vec![0u16; w * h * 3 / 2];
+    wr.write_all(hdr.as_bytes())?;
+    let fsz = w * h * 3 / 2;
+    let mut eof = false;
+    loop {
+        while !eof && den.ready().is_none() {
+            let mut line = String::new();
+            if rd.read_line(&mut line)? == 0 {
+                eof = true;
+                den.finish();
+                break;
+            }
+            if !line.starts_with("FRAME") {
+                bail!("bad y4m frame marker");
+            }
+            let mut f = vec![0u16; fsz];
+            let bytes = unsafe { std::slice::from_raw_parts_mut(f.as_mut_ptr() as *mut u8, fsz * 2) };
+            rd.read_exact(bytes)?;
+            den.push(&f)?;
+        }
+        if den.ready().is_none() {
+            break;
+        }
+        den.step(true, &out)?;
+        out.read(&mut host)?;
+        wr.write_all(b"FRAME\n")?;
+        let bytes = unsafe { std::slice::from_raw_parts(host.as_ptr() as *const u8, fsz * 2) };
+        wr.write_all(bytes)?;
+    }
+    wr.flush()?;
+    Ok(())
 }

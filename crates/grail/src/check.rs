@@ -74,6 +74,7 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
             fullgrain_lib: fg.clone(),
             threads,
             timings: false,
+            siting_left: false,
         };
         eprintln!("case {name} ({})", c["key"].as_str().unwrap_or(""));
         let t0 = std::time::Instant::now();
@@ -204,5 +205,142 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
         std::fs::write(p, serde_json::to_string_pretty(&json!({"cases": rows, "worst": worst}))?)?;
     }
     println!("\n{}", if ok_all { "all stages within tolerance" } else { "some stages over tolerance (see above)" });
+    Ok(())
+}
+
+/// fast mode against the reference's fast-mode inputs (variants.py: S0 and structure on the subsample, the grain
+/// features on the subsample, AV1 synthetic grain not denoised). The reference's fast Q is formed here from those
+/// inputs with the v2.1 model (sigma_g of the subsample; line-art peak over the subsample's frames).
+pub fn run_fast(file: &Path, variants: &str, only: Option<&str>, fg: Option<PathBuf>, threads: usize, out: Option<&Path>,
+                model: &Model) -> Result<()> {
+    use crate::model::{self as M, Feats};
+    let d: Value = serde_json::from_str(&std::fs::read_to_string(file)?)?;
+    let mut var: BTreeMap<String, Value> = BTreeMap::new();
+    for fname in variants.split(',') {
+        for ln in std::fs::read_to_string(fname.trim())?.lines().filter(|l| !l.trim().is_empty()) {
+            // Python's json writes NaN / Infinity, which JSON does not have
+            let ln = ln.replace("-Infinity", "null").replace("Infinity", "null").replace("NaN", "null");
+            let v: Value = serde_json::from_str(&ln)?;
+            var.insert(v["key"].as_str().unwrap_or("").to_string(), v);
+        }
+    }
+    let fg = fg.or_else(|| std::env::var("GRAIL_FULLGRAIN_LIB").ok().map(PathBuf::from));
+    let mut rows = vec![];
+    let mut worst: BTreeMap<&str, f64> = BTreeMap::new();
+    for c in d["cases"].as_array().context("cases")? {
+        let name = c["case"].as_str().unwrap_or("?");
+        let key = c["key"].as_str().unwrap_or("");
+        if only.map(|o| !name.contains(o) && !key.contains(o)).unwrap_or(false) {
+            continue;
+        }
+        let Some(v) = var.get(key) else {
+            eprintln!("case {name}: no fast-mode reference row");
+            continue;
+        };
+        let fa = &v["fast"];
+        let inp = &c["inputs"];
+        let s = inp["start_frame"].as_u64().unwrap() as usize;
+        let e = inp["end_frame"].as_u64().unwrap() as usize;
+        let n = e - s;
+        let rect = |v: &Value| -> [usize; 4] {
+            let a: Vec<usize> = v.as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as usize).collect();
+            [a[0], a[1], a[2], a[3]]
+        };
+        let o = Opts {
+            reference: PathBuf::from(inp["ref"]["path"].as_str().unwrap()),
+            dist: PathBuf::from(inp["cand"]["path"].as_str().unwrap()),
+            fast: true,
+            denoise_candidate: false,
+            start: inp["ref"]["lead"].as_u64().unwrap() as usize + s,
+            dist_start: Some(inp["cand"]["lead"].as_u64().unwrap() as usize + s),
+            frames: Some(n),
+            crop: Crop::Rect(rect(&inp["ref"]["crop"])),
+            dist_crop: Some(rect(&inp["cand"]["crop"])),
+            colour: Some(if inp["colour"].as_str() == Some("pq") { Colour::Pq } else { Colour::Sdr }),
+            fullgrain_lib: fg.clone(),
+            threads,
+            timings: false,
+            siting_left: true,       // variants.py scored the plain pair in-process (vship_api: left on both sides)
+        };
+        eprintln!("case {name} ({key}) fast");
+        let t0 = std::time::Instant::now();
+        let r = score::score(&o, model).with_context(|| format!("case {name}"))?;
+        let secs = t0.elapsed().as_secs_f64();
+        // reference fast Q from its inputs
+        let idx: Vec<usize> = (0..n).step_by(4).flat_map(|a| [a, a + 1]).filter(|&t| t < n).collect();
+        let la = &c["lineart"];
+        let near: Vec<f64> = la["near_top_frames"].as_array().map(|a| a.iter().map(|x| x.as_f64().unwrap()).collect()).unwrap_or_default();
+        let peak = idx.iter().filter_map(|&t| near.get(t)).cloned().fold(0.0, f64::max);
+        let a = f(&la["a"]).unwrap_or(0.0);
+        let s0 = f(&fa["s0_ssimu2"]).unwrap();
+        let mut err: BTreeMap<&str, f64> = BTreeMap::new();
+        err.insert("S0", (r.ssimulacra2 - s0).abs());
+        let (q_ref, g_ref) = if v["clean_shortcut"].as_bool() == Some(true) {
+            (s0, 0.0)
+        } else {
+            let ff: Feats = {
+                let x = &fa["features"];
+                let vv = |k: &str| -> Vec<Vec<f64>> { x[k].as_array().unwrap().iter().map(|r| r.as_array().unwrap().iter().map(|y| y.as_f64().unwrap()).collect()).collect() };
+                let v1 = |k: &str| -> Vec<f64> { x[k].as_array().unwrap().iter().map(|y| y.as_f64().unwrap()).collect() };
+                Feats { sigma_g: x["sigma_g"].as_f64().unwrap(), flat_frac: x["flat_frac"].as_f64().unwrap_or(0.0),
+                        p_s: vv("P_s"), p_c: vv("P_c"), n_lum: v1("n_lum"), chroma_s: v1("chroma_s"), chroma_c: v1("chroma_c"),
+                        stick_s: f(&x["stick_s"]), stick_c: f(&x["stick_c"]), stickc_s: f(&x["stickc_s"]),
+                        stickc_c: f(&x["stickc_c"]), tex_energy_ratio: f(&x["tex_energy_ratio"]), p_ng: None }
+            };
+            let synth = v["synth"].as_bool() == Some(true);
+            let sr = f(&fa["st_ssimu2"]).unwrap();
+            let (st, _) = M::structure(model, ff.sigma_g, synth, None, Some(sr), Some(sr));
+            let pen = M::penalties(&ff);
+            let wsum: f64 = model.terms.iter().zip(&model.weights).map(|(t, w)| w * pen.get(t).copied().unwrap_or(0.0)).sum();
+            let g = M::smoothstep(ff.sigma_g, model.sig.0, model.sig.1);
+            let raw = if synth { r.s_dp } else { r.s_d };
+            if let Some(x) = raw {
+                err.insert("S_raw", (x - sr).abs());
+            }
+            err.insert("sigma_g", (r.sigma_g - ff.sigma_g).abs());
+            let mut prel: f64 = 0.0;
+            let ntot: f64 = ff.n_lum.iter().sum();
+            for (mine, refp) in [(&r.features.p_s, &ff.p_s), (&r.features.p_c, &ff.p_c)] {
+                for b in 0..5 {
+                    for k in 0..8 {
+                        if ff.n_lum[k] >= 0.01 * ntot && ff.n_lum[k] > 0.0 && refp[b][k] > 1e-4 {
+                            prel = prel.max(rel(mine[b][k], refp[b][k]));
+                        }
+                    }
+                }
+            }
+            err.insert("P_rel", prel);
+            err.insert("penalty_sum", (-r.grain - wsum).abs());
+            err.insert("S_struct", (r.structure - st).abs());
+            (s0 + g * (st - s0 - wsum), g)
+        };
+        let lterm = if a > 0.0 { -(1.0 - g_ref) * a * model.la_w * M::lineart_penalty(model, peak) } else { 0.0 };
+        let q_ref = q_ref + lterm;
+        let dq = r.score - q_ref;
+        err.insert("Q", dq.abs());
+        eprintln!("  fast Q {:.3} vs {:.3} (dQ {:+.4}); S0 {:.3} vs {:.3}; frames {}; {:.1} s", r.score, q_ref, dq,
+                  r.ssimulacra2, s0, r.frames_scored, secs);
+        for (k, x) in &err {
+            let w = worst.entry(k).or_insert(0.0);
+            if x.is_finite() && *x > *w {
+                *w = *x;
+            }
+        }
+        rows.push(json!({"case": name, "key": key, "Q_ref_fast": q_ref, "Q_port_fast": r.score, "dQ": dq, "errors": err,
+                          "Q_full_ref": c["Q"], "seconds": secs}));
+    }
+    println!("\nfast mode, per-case |dQ| (reference = its fast-mode inputs through the v2.1 model):");
+    for r in &rows {
+        println!("  {:24} {:46} Q ref {:8.3} port {:8.3}  dQ {:+.4}   (full-mode Q {:8.3})", r["case"].as_str().unwrap(),
+                 r["key"].as_str().unwrap(), r["Q_ref_fast"].as_f64().unwrap(), r["Q_port_fast"].as_f64().unwrap(),
+                 r["dQ"].as_f64().unwrap(), r["Q_full_ref"].as_f64().unwrap());
+    }
+    println!("\nfast mode, per-stage worst error:");
+    for (k, x) in &worst {
+        println!("  {:16} {:>12.5}", k, x);
+    }
+    if let Some(p) = out {
+        std::fs::write(p, serde_json::to_string_pretty(&json!({"cases": rows, "worst": worst}))?)?;
+    }
     Ok(())
 }

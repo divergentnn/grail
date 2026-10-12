@@ -42,6 +42,9 @@ pub struct Opts {
     pub fullgrain_lib: Option<PathBuf>,
     pub threads: usize,
     pub timings: bool,
+    /// plain pair with chroma siting left on both sides (as the reference's in-process libvship calls) instead of
+    /// each file's siting (as FFVship, the reference's full-mode S0)
+    pub siting_left: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Default)]
@@ -374,8 +377,11 @@ pub fn score(o: &Opts, model: &Model) -> Result<Report> {
     let vs = Vship::load()?;
     // plain pair: each file's chroma siting, as FFVship reads it (the reference's S0); denoised pairs: left on both
     // sides, as the reference's in-process libvship calls (vship_api.py)
-    let ss0 = vs.ssimu2(w, h, colour, (crate::vship::chroma_loc(&pr.chroma_location),
-                                       crate::vship::chroma_loc(&pd.chroma_location)))?;
+    let ss0 = if o.siting_left {
+        vs.ssimu2(w, h, colour, (0, 0))?
+    } else {
+        vs.ssimu2(w, h, colour, (crate::vship::chroma_loc(&pr.chroma_location), crate::vship::chroma_loc(&pd.chroma_location)))?
+    };
     let ss = vs.ssimu2(w, h, colour, (0, 0))?;
     tm.insert("init".into(), t_gpu.elapsed().as_secs_f64());
 
