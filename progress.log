@@ -11,3 +11,4 @@
 16:41 bench start (load 2.84); must end by 17:00
 16:42 bench done 16:42 (load 2.84 -> 5.35): 1080p full 24.7 / fast 41.7 fps; 4K sw 7.6 / 13.5; 4K NVDEC 8.6 / 16.9 (Python 13.8/22.4, 4.8/7.5, 5.3/8.8); whole-set subset 144 showings Spearman 0.999993, max |dQ| 0.0004; off the machine (pipeline agent's slot); next: README/docs only until told the machine is free
 16:45 README/batch/packaging committed; asked the coordinator for a short window (full-arch nvcc build check, batch smoke test); overnight whole-set script ready (tools/run_whole_set.sh)
+17:22 window checks: default-arch build OK (fatbin sm_75..sm_120 + PTX, binary 18.9 MB), --batch smoke test OK (2 pairs: full coded + fast synth)
