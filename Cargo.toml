@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/grail-gpu", "crates/grail"]
+
+[workspace.package]
+version = "0.1.0-beta.1"
+edition = "2021"
+license = "UNLICENSED"   # placeholder: licence not chosen yet (README, "Licence")
+repository = ""
+
+[workspace.dependencies]
+anyhow = "1.0.100"
+libloading = "0.8.9"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+clap = { version = "4.6.0", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+debug = 1

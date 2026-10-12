@@ -1,0 +1,67 @@
+{
+ "note": "grainscore v2.1 (fit21.py model, 2026-10-12): Ds_full features (feat_full*.jsonl); structure = S_D' for AV1 synthetic-grain candidates, S_D mapped onto its scale otherwise (struct); no floor term; grain branch refit on every showing; lineart = anime path refit with the branch frozen",
+ "version": "2.1",
+ "base": "ssimu2",
+ "terms": [
+  "under",
+  "under_amp",
+  "over_amp",
+  "over",
+  "soft",
+  "blob",
+  "chroma",
+  "patch",
+  "patch90",
+  "pulse",
+  "pulse_tile",
+  "stick",
+  "stickc",
+  "detail",
+  "detail10",
+  "rep",
+  "texloss"
+ ],
+ "weights": [
+  0.0,
+  3.832,
+  7.8084,
+  7.9634,
+  0.0,
+  18.7556,
+  1.0786,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  3.8007,
+  2.9498,
+  0.0,
+  0.0,
+  0.0,
+  18.9129
+ ],
+ "sig": [
+  0.25,
+  0.8
+ ],
+ "struct": {
+  "p": 1.0,
+  "k_coded": 4.7006,
+  "e_coded": 2.0,
+  "k_ceil": 20.0,
+  "e_ceil": 1.0,
+  "grainy_base_R": 0.95
+ },
+ "lineart": {
+  "stat": "inkflat_s",
+  "lo": 0.05,
+  "hi": 0.1,
+  "tex": "tex6",
+  "tex_lo": 0.6,
+  "tex_hi": 0.9,
+  "form": "sqrt",
+  "tau": 1.5,
+  "w": 35.3973
+ },
+ "n_showings": 574
+}

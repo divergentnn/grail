@@ -1,0 +1,23 @@
+[package]
+name = "grail"
+description = "GRAILS: grain- and line-art-aware video quality score on the SSIMULACRA2 scale"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "grail"
+path = "src/main.rs"
+
+[features]
+default = ["cuda"]
+cuda = ["grail-gpu/cuda"]
+hip = ["grail-gpu/hip"]
+
+[dependencies]
+grail-gpu = { path = "../grail-gpu", default-features = false }
+anyhow.workspace = true
+libloading.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
