@@ -162,6 +162,8 @@ Environment: `GRAIL_VSHIP`, `GRAIL_FULLGRAIN_LIB`, `GRAIL_BACKEND`, `GRAIL_GPU` 
 - The structure term is distance to the measurement denoiser's output, not to the true clean picture; the line-art
   path rests on one 2D film (Your Name (2016)); the score's top is flat at 100 on heavy grain (differences there come
   from the penalties only). Details: the model notes (`GRAINSCORE.md` in the lab).
+- The encode must have the source's resolution and frame rate, or be a crop of it; there is no scaling
+  (`--dist-start` aligns differing frame numbers). HDR: PQ (HDR10) only.
 - Beta tool limits: Linux and NVIDIA only (HIP compile-checked); frame-accurate seeking is by decoding from the start
   of the file; AV1 film grain needs the av1-fullgrain dav1d build (a self-contained GPU grain renderer is planned).
 
