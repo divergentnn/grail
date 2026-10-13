@@ -24,9 +24,9 @@ Here plain SSIMULACRA2 says 70: it marks the encode down for grain that doesn't 
 87: the picture's structure is intact, and only a small penalty remains for how the grain differs from the
 source's.
 
-## Two examples
+## Three examples
 
-Two scenes from the blind tests. Each image shows the same frame and spot of the source and of two encodes, enlarged
+Three scenes from the blind tests. Each image shows the same frame and spot of the source and of two encodes, enlarged
 without smoothing so the grain stays visible. The scores are this tool's (full mode), for the whole 3.3-second clip
 the viewer judged; "viewer" is the verdict the viewer gave each encode, blind, against the source. For each metric,
 a green ✓ marks its score for the encode it rightly prefers (the one the viewer passed), and a red ✗ its score for
@@ -44,6 +44,21 @@ new random grain; GRAILS agrees with the viewer. (This scene is one of those GRA
 |---|---|---|---|---|
 | A: AV1, no grain synthesis (grain smoothed away) | fail | 81.2 | 58.0 | 1.21 Mb/s |
 | B: denoised, AV1 film-grain synthesis | pass | 75.7 | 93.3 | 0.90 Mb/s |
+
+**Heavy grain: Black Swan (2010).** Look at the skin of the face. Both encodes are AV1 at CRF 33 with film-grain
+synthesis. A puts the grain back at half the strength fitted to the source (and starts from a differently denoised
+picture); B uses the full fitted strength. The viewer failed A and passed B, which is also 28 % smaller. On grain
+this heavy, plain SSIMULACRA2 says almost nothing: it gives the passing encode 0.1, near the bottom of its scale,
+and prefers A, whose weaker grain differs less from the source pixel for pixel. GRAILS scores B 87.6 and A 58.7.
+Across all five encodes the viewer judged in this scene, GRAILS puts both passes above all three fails, while
+SSIMULACRA2 gives its highest score to a fail. (This scene is one of those GRAILS was fitted on.)
+
+![Black Swan (2010), 2x crops of the same frame: the source, encode A with AV1 grain at half strength (viewer: fail, SSIMULACRA2 10.2 marked wrong with a red cross, GRAILS 58.7), encode B with AV1 grain at full strength (viewer: pass, SSIMULACRA2 0.1, GRAILS 87.6 marked right with a green check)](docs/images/example-grain-bs.png)
+
+| Black Swan (2010) | viewer | SSIMULACRA2 | GRAILS | bitrate |
+|---|---|---|---|---|
+| A: AV1, synthetic grain at half strength | fail | 10.2 | 58.7 | 2.47 Mb/s |
+| B: AV1, synthetic grain at full strength | pass | 0.1 | 87.6 | 1.78 Mb/s |
 
 **Line art: Your Name (2016)** (4K HDR, tone-mapped for this picture). Both encodes are SVT-AV1 4.2.0 at the same
 file size: A at preset 6, B at the much slower preset 2. Look at the tear highlight and the line under it: in A they

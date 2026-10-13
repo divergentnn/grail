@@ -9,6 +9,7 @@ prefers. `tools/make_examples.py` regenerates the images and the numbers (`docs/
 [README](../README.md).
 
 - [Film grain: The Lighthouse (2019)](#film-grain-the-lighthouse-2019)
+- [Heavy grain: Black Swan (2010)](#heavy-grain-black-swan-2010)
 - [Film grain: The Hunt (2012)](#film-grain-the-hunt-2012)
 - [Line art: Your Name (2016)](#line-art-your-name-2016)
 - [AV1 grain seeds in standard players: Black Swan (2010)](#av1-grain-seeds-in-standard-players-black-swan-2010)
@@ -29,12 +30,30 @@ because a smooth picture is closer to the source pixel for pixel than new random
 | A: AV1, no grain synthesis (grain smoothed away) | fail | 81.2 | 58.0 | 1.21 Mb/s |
 | B: denoised, AV1 film-grain synthesis | pass | 75.7 | 93.3 | 0.90 Mb/s |
 
+## Heavy grain: Black Swan (2010)
+
+Look at the skin of the face. Both encodes are AV1 at CRF 33 with film-grain synthesis. A puts the grain back at
+half the strength fitted to the source (and starts from a differently denoised picture); B uses the full fitted
+strength. The viewer failed A and passed B, which is also 28 % smaller. On grain this heavy, plain SSIMULACRA2 says
+almost nothing: it gives the passing encode 0.1, near the bottom of its scale, and prefers A, whose weaker grain
+differs less from the source pixel for pixel. GRAILS scores B 87.6 and A 58.7. Across all five encodes the viewer
+judged in this scene, GRAILS puts both passes above all three fails, while SSIMULACRA2 gives its highest score to a
+fail. (This scene is one of those GRAILS was fitted on.)
+
+![Black Swan (2010), 2x crops of the same frame: the source, encode A with AV1 grain at half strength (viewer: fail, SSIMULACRA2 10.2 marked wrong with a red cross, GRAILS 58.7), encode B with AV1 grain at full strength (viewer: pass, SSIMULACRA2 0.1, GRAILS 87.6 marked right with a green check)](images/example-grain-bs.png)
+
+| Black Swan (2010) | viewer | SSIMULACRA2 | GRAILS | bitrate |
+|---|---|---|---|---|
+| A: AV1, synthetic grain at half strength | fail | 10.2 | 58.7 | 2.47 Mb/s |
+| B: AV1, synthetic grain at full strength | pass | 0.1 | 87.6 | 1.78 Mb/s |
+
 ## Film grain: The Hunt (2012)
 
-The same comparison on another film. Look at the cheek and the forehead: A's skin is smooth and waxy, B's has the
-source's texture. Both encodes are AV1 at the same settings and CRF; B is 14 % smaller. The viewer failed A, noting
-missing grain and skin texture on a face in another shot of the clip, and passed B. Plain SSIMULACRA2 again prefers
-A, by about 4 points; GRAILS puts B 31 points ahead. (This scene is one of those GRAILS was fitted on.)
+The same comparison as The Lighthouse, on another film. Look at the cheek and the forehead: A's skin is smooth and
+waxy, B's has the source's texture. Both encodes are AV1 at the same settings and CRF; B is 14 % smaller. The viewer
+failed A, noting missing grain and skin texture on a face in another shot of the clip, and passed B. Plain
+SSIMULACRA2 again prefers A, by about 4 points; GRAILS puts B 31 points ahead. (This scene is one of those GRAILS
+was fitted on.)
 
 ![The Hunt (2012), 3x crops of the same frame: the source, encode A with the grain smoothed away (viewer: fail, SSIMULACRA2 82.4 marked wrong with a red cross, GRAILS 61.0), encode B denoised with AV1 film grain (viewer: pass, SSIMULACRA2 78.6, GRAILS 91.6 marked right with a green check)](images/example-grain-hunt.png)
 

@@ -308,5 +308,63 @@
     "frames_scored": 79
    }
   ]
+ },
+ "grain-bs": {
+  "film": "Black Swan (2010)",
+  "image": "docs/images/example-grain-bs.png",
+  "image_size": [
+   880,
+   464
+  ],
+  "frame_in_window": 40,
+  "region_in_window": [
+   940,
+   200,
+   144,
+   196
+  ],
+  "zoom": 2,
+  "window_frames": 79,
+  "model_version": "0.2.1",
+  "tool_version": "0.1.0-beta.1",
+  "mode": "full",
+  "encodes": [
+   {
+    "label": "A: AV1 grain, half strength",
+    "what": "AV1 film grain at half strength",
+    "verdict": "fail",
+    "ssimulacra2": 10.21,
+    "grails": 58.73,
+    "structure": 80.64,
+    "grain_term": -21.9,
+    "lineart_term": 0.0,
+    "path": "synth",
+    "g": 1.0,
+    "line_art_a": 0.0,
+    "mbps": 2.47,
+    "frames_scored": 79,
+    "marks": {
+     "ssimulacra2": "wrong"
+    }
+   },
+   {
+    "label": "B: AV1 grain, full strength",
+    "what": "AV1 film grain fitted to the source",
+    "verdict": "pass",
+    "ssimulacra2": 0.1,
+    "grails": 87.63,
+    "structure": 89.97,
+    "grain_term": -2.34,
+    "lineart_term": 0.0,
+    "path": "synth",
+    "g": 1.0,
+    "line_art_a": 0.0,
+    "mbps": 1.78,
+    "frames_scored": 79,
+    "marks": {
+     "grails": "right"
+    }
+   }
+  ]
  }
 }
