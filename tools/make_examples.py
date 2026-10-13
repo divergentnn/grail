@@ -17,7 +17,8 @@ scene's source; the viewer's ordering from the lab's seed-round record); "table"
 
 Environment: GRAIL_LAB (the lab directory with the review rounds and review/ingest.py; required), GRAIL_FULLGRAIN_LIB
 (required: AV1 film grain is rendered full-frame, in the scores and in the pictures), GRAIL_BIN (default
-target/release/grail), GRAIL_FONT / GRAIL_FONT_BOLD (TrueType fonts for the labels). Needs numpy, Pillow, and ffmpeg
+target/release/grail), GRAIL_FONT / GRAIL_FONT_BOLD (TrueType fonts for the labels), GRAIL_MARK_FONT (a font with
+the check and cross marks; default DejaVu Sans Bold). Needs numpy, Pillow, and ffmpeg
 with libdav1d and zscale. Grail runs at nice 15 with one decoder thread per stream.
 """
 import argparse
@@ -181,11 +182,41 @@ def font(bold, size):
     return ImageFont.load_default()
 
 
+CHECK, CROSS = "\u2713", "\u2717"   # need a font with both glyphs (DejaVu Sans has them)
+
+
+def mark_font(size):
+    for p in (os.environ.get("GRAIL_MARK_FONT"), "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+              "/usr/share/fonts/TTF/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+        if p and Path(p).is_file():
+            return ImageFont.truetype(p, size)
+    sys.exit("no font with check and cross marks: set GRAIL_MARK_FONT (e.g. DejaVu Sans)")
+RANK = {"pass": 2, "borderline": 1, "fail": 0}
+
+
+def marks(rows):
+    """for a pair the viewer judged differently: per metric, a green check on the score of the encode it rightly
+    prefers, or a red cross on the score of the encode it wrongly prefers; nothing for a tie or a single encode"""
+    out = [{} for _ in rows]
+    if len(rows) != 2:
+        return out
+    good, bad = sorted(range(2), key=lambda i: -RANK.get(rows[i]["verdict"], -1))
+    if RANK.get(rows[good]["verdict"], -1) <= RANK.get(rows[bad]["verdict"], -1):
+        return out
+    for m in ("ssimulacra2", "grails"):
+        if rows[good][m] > rows[bad][m]:
+            out[good][m] = CHECK
+        elif rows[bad][m] > rows[good][m]:
+            out[bad][m] = CROSS
+    return out
+
+
 def compose(tiles, captions, path, row2=None, row2_caption=""):
-    """tiles side by side, each with a caption block above: [(text, colour, bold), ...] per tile; row2: a second row
-    of tiles under a one-line caption"""
+    """tiles side by side, each with a caption block above: [(text, colour, bold), ...] per tile, or a line of such
+    segments (a list); row2: a second row of tiles under a one-line caption"""
     th, tw = tiles[0].shape[:2]
-    f_b, f_r = font(True, 15), font(False, 14)
+    f_b, f_r, f_m = font(True, 15), font(False, 14), mark_font(14)
     lh = 20
     cap_h = PAD + lh * max(len(c) for c in captions) + PAD
     W = len(tiles) * tw + (len(tiles) - 1) * GAP
@@ -194,8 +225,12 @@ def compose(tiles, captions, path, row2=None, row2_caption=""):
     d = ImageDraw.Draw(im)
     for i, (t, cap) in enumerate(zip(tiles, captions)):
         x0 = i * (tw + GAP)
-        for j, (text, col, bold) in enumerate(cap):
-            d.text((x0 + 2, PAD + j * lh), text, fill=col, font=f_b if bold else f_r)
+        for j, line in enumerate(cap):
+            xx = x0 + 2
+            for text, col, bold in (line if isinstance(line, list) else [line]):
+                fo = f_m if text.strip() in (CHECK, CROSS) else f_b if bold else f_r
+                d.text((xx, PAD + j * lh), text, fill=col, font=fo)
+                xx += d.textlength(text, font=fo)
         im.paste(Image.fromarray(t), (x0, cap_h))
     if row2:
         d.text((2, cap_h + th + PAD), row2_caption, fill=DIM, font=f_r)
@@ -310,11 +345,19 @@ def main():
 
         tiles = [tile(sh["ref"])] + [tile(sh["cands"][p["cand"]]) for p in ex["panels"]]
         caps = [[("Source", FG, True), (ex["film"], DIM, True), (f"frame {ex['frame']}, enlarged {z}x", DIM, False)]]
-        for r in rows:
+        mk = marks(rows)
+        for r, m in zip(rows, mk):
+            score_line = [(f"SSIMULACRA2 {r['ssimulacra2']:.1f}", DIM, False)]
+            if "ssimulacra2" in m:
+                score_line.append((" " + m["ssimulacra2"], GOOD if m["ssimulacra2"] == CHECK else BAD, True))
+            score_line.append((f"   GRAILS {r['grails']:.1f}", DIM, False))
+            if "grails" in m:
+                score_line.append((" " + m["grails"], GOOD if m["grails"] == CHECK else BAD, True))
             caps.append([(r["label"], FG, True),
                          (f"viewer: {r['verdict']}", BAD if r["verdict"] == "fail" else GOOD if r["verdict"] == "pass"
                           else DIM, True),
-                         (f"SSIMULACRA2 {r['ssimulacra2']:.1f}   GRAILS {r['grails']:.1f}", DIM, False)])
+                         score_line])
+            r["marks"] = {k: ("wrong" if v == CROSS else "right") for k, v in m.items()}
         img = OUT_IMG / f"example-{ex['id']}.png"
         size = compose(tiles, caps, img)
         summary[ex["id"]] = {"film": ex["film"], "image": f"docs/images/{img.name}", "image_size": list(size),

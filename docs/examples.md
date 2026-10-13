@@ -2,9 +2,11 @@
 
 Scenes from the blind tests GRAILS was calibrated on. Each image shows the same frame and spot of every version,
 enlarged without smoothing so the grain stays visible. Unless a section says otherwise, the scores are this tool's
-(full mode, GRAILS model 0.2.1) for exactly the frames and window the viewer judged, a 3.3-second clip, and "viewer" is
-the verdict the viewer gave each encode, blind, against the source. `tools/make_examples.py` regenerates the images
-and the numbers (`docs/images/examples.json`). Back to the [README](../README.md).
+(full mode, GRAILS model 0.2.1) for exactly the frames and window the viewer judged, a 3.3-second clip, and "viewer"
+is the verdict the viewer gave each encode, blind, against the source. For each metric, a green ✓ marks its score
+for the encode it rightly prefers (the one the viewer passed), and a red ✗ its score for the encode it wrongly
+prefers. `tools/make_examples.py` regenerates the images and the numbers (`docs/images/examples.json`). Back to the
+[README](../README.md).
 
 - [Film grain: The Lighthouse (2019)](#film-grain-the-lighthouse-2019)
 - [Film grain: The Hunt (2012)](#film-grain-the-hunt-2012)
@@ -20,7 +22,7 @@ film-grain synthesis. The viewer failed A and passed B, which is also a quarter 
 because a smooth picture is closer to the source pixel for pixel than new random grain; GRAILS agrees with the viewer.
 (This scene is one of those GRAILS was fitted on.)
 
-![The Lighthouse (2019), 2x crops of the same frame: the source, encode A with the grain smoothed away (viewer: fail, SSIMULACRA2 81.2, GRAILS 58.0), encode B denoised with AV1 film grain (viewer: pass, SSIMULACRA2 75.7, GRAILS 93.3)](images/example-grain.png)
+![The Lighthouse (2019), 2x crops of the same frame: the source, encode A with the grain smoothed away (viewer: fail, SSIMULACRA2 81.2 marked wrong with a red cross, GRAILS 58.0), encode B denoised with AV1 film grain (viewer: pass, SSIMULACRA2 75.7, GRAILS 93.3 marked right with a green check)](images/example-grain.png)
 
 | The Lighthouse (2019) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
@@ -34,7 +36,7 @@ source's texture. Both encodes are AV1 at the same settings and CRF; B is 14 % s
 missing grain and skin texture on a face in another shot of the clip, and passed B. Plain SSIMULACRA2 again prefers
 A, by about 4 points; GRAILS puts B 31 points ahead. (This scene is one of those GRAILS was fitted on.)
 
-![The Hunt (2012), 3x crops of the same frame: the source, encode A with the grain smoothed away (viewer: fail, SSIMULACRA2 82.4, GRAILS 61.0), encode B denoised with AV1 film grain (viewer: pass, SSIMULACRA2 78.6, GRAILS 91.6)](images/example-grain-hunt.png)
+![The Hunt (2012), 3x crops of the same frame: the source, encode A with the grain smoothed away (viewer: fail, SSIMULACRA2 82.4 marked wrong with a red cross, GRAILS 61.0), encode B denoised with AV1 film grain (viewer: pass, SSIMULACRA2 78.6, GRAILS 91.6 marked right with a green check)](images/example-grain-hunt.png)
 
 | The Hunt (2012) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
@@ -45,13 +47,14 @@ A, by about 4 points; GRAILS puts B 31 points ahead. (This scene is one of those
 
 4K HDR, tone-mapped for this picture. Both encodes are SVT-AV1 4.2.0 at the same file size: A at preset 6, B at the
 much slower preset 2. Look at the tear highlight and the line under it: in A they are surrounded by a faint halo and
-look smeared; B keeps them clean. The viewer failed A and passed B. SSIMULACRA2 ranks them the same way, but its 72.6
-for A doesn't tell you anything is wrong: on the other films, encodes with an SSIMULACRA2 of 72 to 74 passed about half
-the time in the blind tests (15 of 29 showings). GRAILS's line-art check measures the halos next to the lines and
-takes 10.9 points off A; B has none, so its GRAILS is its SSIMULACRA2. The crop is from the frames where GRAILS measured
-A's strongest ringing. (This scene was not among those GRAILS was fitted on.)
+look smeared; B keeps them clean. The viewer failed A and passed B. SSIMULACRA2 ranks them the same way (both
+metrics get a ✓), but its 72.6 for A doesn't tell you anything is wrong: on the other films, encodes with an
+SSIMULACRA2 of 72 to 74 passed about half the time in the blind tests (15 of 29 showings). GRAILS's line-art check
+measures the halos next to the lines and takes 10.9 points off A; B has none, so its GRAILS is its SSIMULACRA2. The
+crop is from the frames where GRAILS measured A's strongest ringing. (This scene was not among those GRAILS was
+fitted on.)
 
-![Your Name (2016), 3x crops of the same frame: the source, encode A at SVT-AV1 preset 6 (viewer: fail, SSIMULACRA2 72.6, GRAILS 61.8), encode B at SVT-AV1 preset 2 (viewer: pass, SSIMULACRA2 77.9, GRAILS 77.9)](images/example-lineart.png)
+![Your Name (2016), 3x crops of the same frame: the source, encode A at SVT-AV1 preset 6 (viewer: fail, SSIMULACRA2 72.6, GRAILS 61.8), encode B at SVT-AV1 preset 2 (viewer: pass, SSIMULACRA2 77.9 and GRAILS 77.9, both marked right with green checks)](images/example-lineart.png)
 
 | Your Name (2016) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
