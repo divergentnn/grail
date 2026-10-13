@@ -221,6 +221,10 @@ most of its speed.
   rings around the lines. In the blind tests, GRAILS scored a failed x265 encode of one such scene above a passing
   SVT-AV1 one (75.3 against 67.6), where plain SSIMULACRA2 had the passing one ahead, if only just (78.89 against
   78.85). For grainy animation, check plain SSIMULACRA2 and your own eyes too.
+- **Film grain added on top of grain.** When an AV1 encode adds synthetic film grain to a picture that still carries
+  some of the source's grain (because the grain wasn't fully removed before encoding), GRAILS reads the leftover grain
+  as lost detail. In tests, such encodes scored up to about 10 points below the same picture encoded without grain
+  synthesis; whether viewers agree hasn't been tested yet.
 - **Inputs.** The encode must have the source's resolution and frame rate, or be a crop of it. grail checks both
   files before scoring and rejects, with a message, what it can't score faithfully: odd frame sizes or windows,
   full-range video, formats other than 8- or 10-bit YUV, and colour other than BT.709 SDR or HDR10 (PQ) unless
