@@ -1,7 +1,7 @@
 //! Shared GPU operations (as grail-gpu's; the reductions return per-block partials summed on the host): scipy.ndimage-style separable filters (mode "reflect"), radix selection (order statistics
 //! without a host round trip) and small reductions.
 use crate::args;
-use crate::buf::{launch, launch_n, launch_reduce, reduce_blocks, DBuf};
+use crate::buf::{launch, launch_n, launch_reduce, reduce_blocks, Arg, DBuf};
 use anyhow::Result;
 
 /// largest radius of the tiled correlation kernels (corr_x / corr_y)
@@ -13,11 +13,13 @@ const CORR_K: usize = 8;
 pub struct Kern {
     pub buf: DBuf,
     pub r: i32,
+    /// the weights on the host (passed by value to the tiled kernels)
+    pub w: Vec<f32>,
 }
 impl Kern {
     pub fn new(w: &[f32]) -> Result<Kern> {
         assert!(w.len() % 2 == 1);
-        Ok(Kern { buf: DBuf::upload(w)?, r: (w.len() / 2) as i32 })
+        Ok(Kern { buf: DBuf::upload(w)?, r: (w.len() / 2) as i32, w: w.to_vec() })
     }
     /// scipy.ndimage gaussian_filter weights (truncate 3.0: radius int(3 sigma + 0.5)), float64 -> float32
     pub fn gauss_scipy(sigma: f64) -> Result<Kern> {
@@ -43,10 +45,16 @@ pub fn corr2(src: u64, dst: u64, tmp: u64, w: usize, h: usize, planes: usize, kv
         // tiled kernels (same sums, same order)
         let sfx = if double { "d" } else { "f" };
         let (wi, hi) = (w as i32, h as i32);
+        let targs = |a: u64, b: u64, k: &Kern| -> Vec<Arg> {
+            let mut v = vec![Arg::P(a), Arg::P(b), Arg::I(wi), Arg::I(hi), Arg::I(k.r)];
+            v.extend(k.w.iter().map(|&x| Arg::F(x)));
+            v.resize(5 + 2 * CORR_RMAX as usize + 1, Arg::F(0.0));
+            v
+        };
         launch(&format!("corr_y_{sfx}"), (w.div_ceil(32) as u32, h.div_ceil(8 * CORR_K) as u32, planes as u32), (32, 8, 1),
-               0, args![src, tmp, wi, hi, &kv.buf, kv.r])?;
+               0, &targs(src, tmp, kv))?;
         return launch(&format!("corr_x_{sfx}"), (w.div_ceil(256 * CORR_K) as u32, h as u32, planes as u32), (256, 1, 1), 0,
-                      args![tmp, dst, wi, hi, &kh.buf, kh.r]);
+                      &targs(tmp, dst, kh));
     }
     let name = if double { "corr_d" } else { "corr_f" };
     launch_n(name, n as usize, args![src, tmp, w as i32, h as i32, n, &kv.buf, kv.r, 0i32])?;

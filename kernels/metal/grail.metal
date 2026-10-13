@@ -233,8 +233,9 @@ kernel void corr_d(constant CorrArgs& P [[buffer(0)]], KARGS) {
 // in the order j = -r .. r, so the results are those of corr_f / corr_d.
 #define CORR_RMAX 32
 #define CK 8
-struct CorrTArgs { cfp a; fp b; int W, H; cfp wt; int r; };
-template <bool D> static inline void corr_run(threadgroup const float* s, int stride, threadgroup const float* wt, int r,
+// the weights by value in the argument struct: constant memory, read with a uniform index (fast on Apple GPUs)
+struct CorrTArgs { cfp a; fp b; int W, H, r; float wt[2 * CORR_RMAX + 1]; };
+template <bool D> static inline void corr_run(threadgroup const float* s, int stride, constant float* wt, int r,
                                               thread float* hi, thread float* lo) {
     for (int k = 0; k < CK; k++) { hi[k] = 0.f; lo[k] = 0.f; }
     for (int m = 0; m < CK + 2 * r; m++) {
@@ -257,10 +258,9 @@ template <bool D> kernel void corr_x(constant CorrTArgs& P [[buffer(0)]], KARGS)
     const int x0 = blockIdx.x * 256 * CK, y = blockIdx.y;
     cfp row = P.a + ((long)blockIdx.z * H + y) * W;
     for (int j = threadIdx.x; j < 256 * CK + 2 * r; j += 256) s[j] = row[reflect_idx(x0 - r + j, W)];
-    for (int j = threadIdx.x; j <= 2 * r; j += 256) wt[j] = P.wt[j];
     SYNC();
     float hi[CK], lo[CK];
-    corr_run<D>(s + threadIdx.x * CK, 1, wt, r, hi, lo);
+    corr_run<D>(s + threadIdx.x * CK, 1, P.wt, r, hi, lo);
     fp out = P.b + ((long)blockIdx.z * H + y) * W;
     for (int k = 0; k < CK; k++) {
         int x = x0 + threadIdx.x * CK + k;
@@ -277,11 +277,10 @@ template <bool D> kernel void corr_y(constant CorrTArgs& P [[buffer(0)]], KARGS)
     cfp pl = P.a + (long)blockIdx.z * H * W;
     const int xc = min(x, W - 1);
     for (int j = threadIdx.y; j < 8 * CK + 2 * r; j += 8) s[j * 32 + threadIdx.x] = pl[(long)reflect_idx(y0 - r + j, H) * W + xc];
-    for (int j = threadIdx.y * 32 + threadIdx.x; j <= 2 * r; j += 256) wt[j] = P.wt[j];
     SYNC();
     if (x >= W) return;
     float hi[CK], lo[CK];
-    corr_run<D>(s + threadIdx.y * CK * 32 + threadIdx.x, 32, wt, r, hi, lo);
+    corr_run<D>(s + threadIdx.y * CK * 32 + threadIdx.x, 32, P.wt, r, hi, lo);
     for (int k = 0; k < CK; k++) {
         int y = y0 + threadIdx.y * CK + k;
         if (y < H) P.b[(long)blockIdx.z * H * W + (long)y * W + x] = D ? hi[k] + lo[k] : hi[k];
