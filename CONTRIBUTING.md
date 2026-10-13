@@ -91,7 +91,7 @@ its own verdict.
 
 **A good set** has several versions per scene (a CRF ladder, presets, grain settings, encoders), from clearly good to
 clearly bad, with many near your own threshold. A hidden copy of the source among the versions is a useful check (it
-should pass).
+should pass; mark it `"null": true` in the data).
 
 **Viewing conditions.** Record them once per setup: the display (make and model, or type: OLED, LCD, projector), its
 size and your distance from it, SDR or HDR (and the peak brightness if you know it), the room light, and the player.
@@ -139,7 +139,8 @@ calibration/<reviewer>/
  "window": {"start": 1200, "frames": 96, "crop": [312, 0, 1296, 1032]},
  "encode": {"encoder": "SVT-AV1 4.2.0", "preset": 6, "crf": 31, "grain": "film-grain synthesis", "mbps": 0.9},
  "report": "reports/r1-g03-B.json", "verdict": "pass", "tags": [], "note": "",
- "vote": "B", "vote_confidence": "medium", "grain_render": "full-frame",
+ "vote": "B", "vote_confidence": "medium", "grain_render": "full-frame", "null": false,
+ "review": {"tool": "mpv", "grain_renderer": "av1-fullgrain dav1d", "gpu": "RTX 3060", "fullframe_check": true},
  "reviewer": "<pseudonym>", "viewing": "tv", "date": "2026-10-20"}
 ```
 
@@ -160,6 +161,8 @@ calibration/<reviewer>/
 | `tags`, `note` | no | the cause tags and your note |
 | `vote`, `vote_confidence` | pair groups | `A` / `B` / `tie` / `cant_tell` and `low` / `medium` / `high`, the same on both lines of the pair |
 | `grain_render` | yes | `full-frame` (an AV1 grain encode rendered with full-frame grain) or `not AV1 grain` |
+| `null` | no | `true` if this showing is a hidden copy of the source shown as one of the versions (a check on the review) |
+| `review` | no | how you reviewed: `tool` (`grail review x.y`, `mpv` ...), `grain_renderer` (`av1-fullgrain dav1d`, `av1-fullgrain-gpu 0.1` ...), `gpu`, and `fullframe_check` (`true` if you confirmed full-frame grain rendering before judging) |
 | `reviewer` | yes | your pseudonym |
 | `viewing` | yes | the setup in `viewing.json` |
 | `date` | yes | when you judged it |
