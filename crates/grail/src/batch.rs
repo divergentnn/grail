@@ -73,7 +73,7 @@ pub fn run(list: &Path, out: Option<&Path>, base: &Opts, full: bool, model: &Mod
             .map(|v| v["id"].to_string()).collect(),
         _ => Default::default(),
     };
-    let backend = grail_gpu::GpuBackend::new()?;
+    let backend = crate::new_backend()?;
     let mut sink: Box<dyn Write> = match out {
         Some(p) => Box::new(std::fs::OpenOptions::new().create(true).append(true).open(p)?),
         None => Box::new(std::io::stdout()),
@@ -84,7 +84,7 @@ pub fn run(list: &Path, out: Option<&Path>, base: &Opts, full: bool, model: &Mod
             continue;
         }
         let t0 = std::time::Instant::now();
-        let row = match score::score(&o, model, &backend) {
+        let row = match score::score(&o, model, backend.as_ref()) {
             Ok(r) => {
                 let label = if r.mode == "full" { format!("{} {:.2}", r.flavour, r.score) }
                             else { format!("{} {:.2} ({})", r.flavour, r.score, r.mode) };

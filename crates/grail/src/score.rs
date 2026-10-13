@@ -52,6 +52,8 @@ pub enum HwDec {
     None,
     /// NVDEC for every non-AV1 stream (AV1 stays on dav1d: full-frame grain needs it)
     Cuda,
+    /// VideoToolbox (macOS) for every non-AV1 stream
+    VideoToolbox,
 }
 
 #[derive(Clone, Debug, Serialize, Default)]
@@ -339,7 +341,7 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
 
     let hw = |p: &Probe| p.codec != "av1" && match o.hwdec {
         HwDec::None => false,
-        HwDec::Cuda => true,
+        HwDec::Cuda | HwDec::VideoToolbox => true,
         HwDec::Auto => p.width > 2048,
     };
     // host memory for decoded frames: the reference's frames are kept for the active-picture scan up to this budget
@@ -464,61 +466,93 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     let mut t_den = 0.0;
     let mut t_la = 0.0;
 
-    for &t in &scored {
-        let tt = Instant::now();
-        rstream.produce(rfirst + t, Some(&mut ds_win))?;
-        s_win.set(rstream.take_window(rfirst + t)?);
-        cstream.produce(dfirst + t, if denoise_cand { Some(&mut dc_win) } else { None })?;
-        c_win.set(cstream.take_window(dfirst + t)?);
-        if let Some(st) = ngstream.as_mut() {
-            st.produce(dfirst + t, None)?;
-            ng_win.set(st.take_window(dfirst + t)?);
-        }
-        t_den += tt.elapsed().as_secs_f64();
-        // the SSIMULACRA2 pairs (libvship, its own GPU work and host conversions) run on helper threads while the
-        // grain features and line-art measures run here
-        let tt = Instant::now();
-        pf.frame.push(t);
-        let consecutive = last.map(|l| l + 1 == t).unwrap_or(false);
-        let (hs, hc, hds, hdc, hng) = (s_win.host.clone(), c_win.host.clone(), ds_win.host.clone(), dc_win.host.clone(),
-                                       ng_win.host.clone());
-        let (ss0r, ssr, ss2r) = (&ss0, &ss, &ss2);
-        let (scores, feat_res, t_f) = std::thread::scope(|sc| {
-            let a = sc.spawn(move || ss0r.score(&hs, &hc));
-            let b = denoise_cand.then(|| { let (x, y) = (hds.clone(), hdc); sc.spawn(move || ssr.score(&x, &y)) });
-            let c = synth.then(|| sc.spawn(move || ss2r.score(&hds, &hng)));
-            let tf = Instant::now();
-            let ff = if denoise_cand {
-                FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut dc_win,
-                               cng: if synth { Some(&mut ng_win) } else { None } }
+    // the SSIMULACRA2 pairs (libvship: its own GPU work and host conversions) run on one worker thread per pair, fed
+    // through short queues, so they overlap the denoise, features and line art of the following frames; the main
+    // thread only waits when a queue is full and at the end
+    type Pair = (std::sync::Arc<Vec<u16>>, std::sync::Arc<Vec<u16>>);
+    let metric_worker = |h: &crate::vship::Ssimu2<'_>, rx: std::sync::mpsc::Receiver<Pair>| -> Result<Vec<f64>> {
+        rx.into_iter().map(|(a, b)| h.score(&a, &b)).collect()
+    };
+    std::thread::scope(|sc| -> Result<()> {
+        let mut queues = vec![];
+        let mut workers = vec![];
+        for (h, on) in [(&ss0, true), (&ss, denoise_cand), (&ss2, synth)] {
+            if on {
+                let (tx, rx) = std::sync::mpsc::sync_channel::<Pair>(4);
+                queues.push(Some(tx));
+                workers.push(Some(sc.spawn(move || metric_worker(h, rx))));
             } else {
-                FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut ng_win, cng: None }
-            };
-            let fr = feats.frame(ff, consecutive);
-            let t_f = tf.elapsed().as_secs_f64();
-            let j = |h: std::thread::ScopedJoinHandle<'_, Result<f64>>| h.join().unwrap_or_else(|_| Err(anyhow::anyhow!("libvship thread panicked")));
-            (( j(a), b.map(j), c.map(j)), fr, t_f)
-        });
-        feat_res?;
-        pf.ssimulacra2.push(scores.0?);
-        if let Some(x) = scores.1 {
-            pf.s_d.push(x?);
+                queues.push(None);
+                workers.push(None);
+            }
         }
-        if let Some(x) = scores.2 {
-            pf.s_dp.push(x?);
-        }
-        last = Some(t);
-        t_feat += t_f;
-        t_metric += tt.elapsed().as_secs_f64() - t_f;
+        let mut send = |k: usize, pair: Pair| -> bool {
+            let tt = Instant::now();
+            let ok = queues[k].as_ref().map(|q| q.send(pair).is_ok()).unwrap_or(true);
+            t_metric += tt.elapsed().as_secs_f64();
+            ok
+        };
+        let mut run = || -> Result<()> {
+            for &t in &scored {
+                let tt = Instant::now();
+                rstream.produce(rfirst + t, Some(&mut ds_win))?;
+                s_win.set(rstream.take_window(rfirst + t)?);
+                cstream.produce(dfirst + t, if denoise_cand { Some(&mut dc_win) } else { None })?;
+                c_win.set(cstream.take_window(dfirst + t)?);
+                if let Some(st) = ngstream.as_mut() {
+                    st.produce(dfirst + t, None)?;
+                    ng_win.set(st.take_window(dfirst + t)?);
+                }
+                t_den += tt.elapsed().as_secs_f64();
+                pf.frame.push(t);
+                // a worker that failed has dropped its queue: stop here, its error is reported below
+                if !send(0, (s_win.host.clone(), c_win.host.clone()))
+                    || !send(1, (ds_win.host.clone(), dc_win.host.clone()))
+                    || !send(2, (ds_win.host.clone(), ng_win.host.clone())) {
+                    return Ok(());
+                }
+                let tt = Instant::now();
+                let consecutive = last.map(|l| l + 1 == t).unwrap_or(false);
+                let ff = if denoise_cand {
+                    FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut dc_win,
+                                   cng: if synth { Some(&mut ng_win) } else { None } }
+                } else {
+                    FeatureFrame { s: &mut s_win, ds: &mut ds_win, c: &mut c_win, dc: &mut ng_win, cng: None }
+                };
+                feats.frame(ff, consecutive)?;
+                last = Some(t);
+                t_feat += tt.elapsed().as_secs_f64();
+                let tt = Instant::now();
+                if t % 4 == 0 {
+                    let d = la.detect(&mut s_win)?;
+                    det_tex.push(d.tex6);
+                    det_ink.push(d.inkflat_s);
+                }
+                pf.lineart_near_top.push(la.ring(&mut s_win, &mut c_win)?);
+                t_la += tt.elapsed().as_secs_f64();
+            }
+            Ok(())
+        };
+        let r = run();
+        drop(run);
+        drop(send);
+        queues.clear();
         let tt = Instant::now();
-        if t % 4 == 0 {
-            let d = la.detect(&mut s_win)?;
-            det_tex.push(d.tex6);
-            det_ink.push(d.inkflat_s);
+        let mut res = vec![];
+        for w in workers {
+            res.push(w.map(|h| h.join().unwrap_or_else(|_| Err(anyhow::anyhow!("libvship thread panicked")))));
         }
-        pf.lineart_near_top.push(la.ring(&mut s_win, &mut c_win)?);
-        t_la += tt.elapsed().as_secs_f64();
-    }
+        t_metric += tt.elapsed().as_secs_f64();
+        r?;
+        let mut res = res.into_iter();
+        pf.ssimulacra2 = res.next().flatten().transpose()?.unwrap_or_default();
+        pf.s_d = res.next().flatten().transpose()?.unwrap_or_default();
+        pf.s_dp = res.next().flatten().transpose()?.unwrap_or_default();
+        if pf.ssimulacra2.len() != pf.frame.len() {
+            bail!("SSIMULACRA2: {} of {} frames scored", pf.ssimulacra2.len(), pf.frame.len());
+        }
+        Ok(())
+    })?;
     // drain the decoders (ffmpeg exits cleanly) and collect the seeds of the grain-free decode
     let drain = |src: Source| -> Result<Vec<(usize, u32)>> {
         match src {

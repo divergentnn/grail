@@ -10,15 +10,21 @@ name = "grail"
 path = "src/main.rs"
 
 [features]
+# CUDA / HIP select the kernels of grail-gpu (Linux, Windows); macOS always uses grail-metal
 default = ["cuda"]
 cuda = ["grail-gpu/cuda"]
 hip = ["grail-gpu/hip"]
 
 [dependencies]
 grail-stages = { path = "../grail-stages" }
-grail-gpu = { path = "../grail-gpu", default-features = false }
 anyhow.workspace = true
 libloading.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+grail-gpu = { path = "../grail-gpu", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+grail-metal = { path = "../grail-metal" }
