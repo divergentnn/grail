@@ -124,12 +124,15 @@ rates the seeds for standard players.
   Then we checked it on films the model hadn't seen: take two encodes of different scenes that the viewer rated
   differently; how often does the better-rated one get the higher score? GRAILS: **68 %** of the time, plain
   SSIMULACRA2: **55 %** (50 % is a coin flip). That is what a quality target needs: the same score meaning about the
-  same quality from scene to scene. The other common metrics do no better than SSIMULACRA2.
+  same quality from scene to scene. The other common metrics do no better than SSIMULACRA2. This is evaluated fully
+  held out by film: for each film, the whole system is refitted on the other films only. With the line-art path, on
+  all 616 verdicts across 15 films: 71 % against 55 %.
 - **AV1 film grain synthesis.** GRAILS renders AV1's synthetic grain the way it should look, full frame
   ([av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)), and compares it fairly with the source's real grain.
   So you can tell whether your grain settings actually work.
 - **2D animation.** It adds a check for ringing (halos) around line art, a common artifact of fast AV1 presets on
-  anime.
+  anime. On grainy 2D animation the line-art check doesn't fire yet, and GRAILS can favour encodes that keep the
+  source's grain; rank those with plain SSIMULACRA2.
 - **Clean footage costs nothing.** With no grain and no line art, GRAILS is SSIMULACRA2, exactly.
 
 Typical uses: comparing CRFs, presets or encoders on the same scene; checking film-grain settings; scoring scenes in a
@@ -166,8 +169,10 @@ scoring and JSON output are in **[docs/usage.md](docs/usage.md)**.
   lower bound: badly damaged encodes can score below 0.
 - **Compare encodes of the same scene.** That's where GRAILS is strongest: of two encodes of one scene, judged in
   the same test, that the viewer rated differently, the better-rated one gets the higher GRAILS about 4 times in 5
-  (81 %; plain SSIMULACRA2 76 %, on films the model hadn't seen). There is no universal pass mark yet, because where
-  a viewer starts to see a problem still varies from scene to scene and film to film.
+  (81 %; plain SSIMULACRA2 76 %, on films the model hadn't seen), except on grainy 2D animation. There is no
+  universal pass mark yet, because where a viewer starts to see a problem still varies from scene to scene and film
+  to film; and as a predictor of the verdict itself (how likely pass, borderline or fail is), GRAILS is not clearly
+  better than plain SSIMULACRA2. Its advantage is ranking.
 - **Full or fast mode?** Fast mode scores a sample of the frames and is about twice as fast, with the same accuracy
   overall. On very heavy, coarse grain, use full mode (or `--fast --denoise-candidate`).
 - The output also shows plain SSIMULACRA2. When the two differ a lot, grain (or line art) is the reason.

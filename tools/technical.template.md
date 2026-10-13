@@ -78,6 +78,10 @@ candidate for a second release once more verdicts exist; the letter keeps the tw
   prefer an encode that keeps the grain while it rings next to the lines. Riding Haku (a later blind round, not in
   the fit): x265 slow, failed, GRAILS 75.3 / SSIMULACRA2 78.85; SVT-AV1 4.2.0 preset 2, passed, GRAILS 67.6 /
   SSIMULACRA2 78.89. On grainy animation, check plain SSIMULACRA2 and look.
+- **Ranking, not calibrated probabilities.** Held out by film, with everything refitted in each fold, GRAILS ranks
+  encodes clearly better than plain SSIMULACRA2 (cross-scene concordance 0.680 against 0.546, AUC 0.712 against
+  0.574), but as a predictor of the pass / borderline / fail verdict it is not clearly better: plain SSIMULACRA2's
+  held-out log loss is +0.034 [-0.024, +0.079] against GRAILS's (section "How well GRAIL agrees with viewers").
 - **A fixed target is not stable across scenes.** The per-scene pass line still spreads by about 14-16 points (24-28
   CRF steps). Per-scene minimums work; one film-wide target does not.
 - **Heavy grain: prefer full mode.** Fast mode skips the denoise of AV1 synthetic-grain encodes; on heavy, coarse

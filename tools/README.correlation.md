@@ -1,20 +1,20 @@
 ## How well GRAIL agrees with viewers
 
-*Calibration: GRAILS model 0.2.1 (the lab's v2.1), 2026-10-12. Cite as: GRAILS 0.2.1 (2026-10-12), 574 blind
-showings, one reviewer, held out by film.*
+*GRAILS model 0.2.1 (the lab's v2.1), nested held-out evaluation of 2026-10-12. Cite as: GRAILS 0.2.1 (2026-10-12),
+574 blind showings (616 with the line-art round), one reviewer, held out by film.*
 
 ### Dataset
 
-One reviewer judged every encode blind, in 30 review rounds held 2026-10-10 to 2026-10-12: each showing is one
+One reviewer judged every encode blind, in review rounds held 2026-10-10 to 2026-10-12: each showing is one
 encode of one scene, played 1:1 (a 1920x1080 window of 4K sources) next to its source, with a verdict of pass /
 borderline / fail. Encodes come from several encoders and settings (SVT-AV1 with synthetic film grain at CRF ladders
 and grain strengths, x265, x264, SVT-AV1 without grain synthesis, near-lossless controls).
 
-574 judged showings, 13 films, 48 scenes, 30 blind rounds; verdicts pass 259 / borderline 89 / fail 226.
+616 judged showings, 15 films, 54 scenes, 31 blind rounds; verdicts pass 275 / borderline 99 / fail 242.
 
 | film | scenes | showings |
 |---|---|---|
-| Your Name (2016) | 3 | 121 |
+| Your Name (2016) | 5 | 135 |
 | Black Swan (2010) | 5 | 81 |
 | Inglourious Basterds (2009) | 4 | 76 |
 | The Lighthouse (2019) | 3 | 54 |
@@ -26,14 +26,30 @@ and grain strengths, x265, x264, SVT-AV1 without grain synthesis, near-lossless 
 | Dune (2021) | 4 | 25 |
 | 1917 (2019) | 3 | 22 |
 | The Super Mario Bros. Movie (2023) | 3 | 16 |
+| Spirited Away (2001) | 2 | 14 |
+| Chainsaw Man - The Movie: Reze Arc (2025) | 2 | 14 |
 | The Wild Robot (2024) | 2 | 9 |
 
-Every number below is **held out by film**: the weights (and the grain-dependent structure lift) are fitted on 12
-films and scored on the 13th, for each film in turn. Columns: held-out log loss of an ordinal pass / borderline /
-fail model on the score (lower is better; knowing only the verdict shares gives 1.023),
-cross-scene concordance (does a higher score mean a better verdict for showings of DIFFERENT scenes: the property a
-quality target needs), within-scene concordance (ranking versions of one scene), and AUC of pass vs not pass.
-"Fast" = the `--fast` mode (section below) with the full mode's weights.
+The flavour comparison below uses the 574 showings of the first 30 rounds (13 films, 48 scenes); the last round
+(42 showings, two more line-art films) enters in "Line art".
+
+### How it is held out
+
+Every number below is **held out by film, nested**: for each film in turn, the whole system is fitted on the other
+films only (the structure-path offset, the normalisation scale and grain-dependent lift, the penalty weights, the
+line-art parameters, and the ordinal pass / borderline / fail mapping on that system's own training scores), and that
+one system scores the held-out film. Log loss: every showing under its own fold's mapping (lower is better; knowing
+only the verdict shares gives 1.023). Concordance and AUC pool the held-out scores of all folds, so a cross-film
+pair compares scores from two different fold systems. Plain metrics learn only the mapping, fitted on the other
+films. Columns: held-out log loss, cross-scene concordance (does a higher score mean a better verdict for showings of
+DIFFERENT scenes: the property a quality target needs), within-scene concordance (ranking versions of one scene, shown
+side by side in one round), and AUC of pass vs not pass. "Fast" = the `--fast` mode (section below), fitted the same way.
+
+Earlier versions of these tables (before 2026-10-12) fitted the path offset, the scale and the mapping partly on all
+showings, so the held-out film had leaked in. The nested numbers replace them. GRAILS full: log loss 0.975 -> 0.995,
+cross-scene 0.682 -> 0.680, within-scene 0.806 -> 0.806, AUC 0.714 -> 0.712; the other composites lose up to 0.06 in
+log loss; plain metrics are unchanged (1.029 / 0.546 / 0.757 / 0.574 for SSIMULACRA2). Subset rows now use the
+whole-set mapping for plain metrics too.
 
 ### Agreement with the verdicts
 
@@ -43,111 +59,120 @@ was fitted on four other base metrics (XPSNR-Y, VMAF-NEG, CVVDP, Butteraugli 3-n
 the verdicts, so they are not released (each would read in its own base's units: dB, VMAF points, JOD, distance).
 Plain base metrics are listed last.
 
-**all**
+**All showings** (574 showings)
 
 | score | held-out log loss | cross-scene | within-scene | AUC (pass) |
 |---|---|---|---|---|
-| GRAILS full | 0.975 | 0.682 | 0.806 | 0.714 |
-| GRAILS fast | 0.965 | 0.689 | 0.817 | 0.717 |
-| XPSNR base full | 1.013 | 0.624 | 0.833 | 0.651 |
-| XPSNR base fast | 0.997 | 0.616 | 0.825 | 0.643 |
-| VMAF-NEG base full | 0.996 | 0.643 | 0.817 | 0.667 |
-| VMAF-NEG base fast | 0.999 | 0.653 | 0.844 | 0.675 |
-| CVVDP base full | 1.023 | 0.619 | 0.762 | 0.635 |
-| CVVDP base fast | 1.027 | 0.607 | 0.765 | 0.618 |
-| Butteraugli base full | 0.969 | 0.690 | 0.806 | 0.718 |
-| Butteraugli base fast | 0.965 | 0.696 | 0.803 | 0.716 |
+| GRAILS full | 0.995 | 0.680 | 0.806 | 0.712 |
+| GRAILS fast | 0.984 | 0.688 | 0.817 | 0.716 |
+| XPSNR base full | 1.072 | 0.623 | 0.833 | 0.650 |
+| XPSNR base fast | 1.066 | 0.614 | 0.822 | 0.642 |
+| VMAF-NEG base full | 1.060 | 0.645 | 0.814 | 0.667 |
+| VMAF-NEG base fast | 1.061 | 0.652 | 0.839 | 0.674 |
+| CVVDP base full | 1.073 | 0.627 | 0.779 | 0.643 |
+| CVVDP base fast | 1.056 | 0.613 | 0.765 | 0.624 |
+| Butteraugli base full | 0.987 | 0.686 | 0.801 | 0.714 |
+| Butteraugli base fast | 0.978 | 0.693 | 0.803 | 0.713 |
 | plain ssimu2 | 1.029 | 0.546 | 0.757 | 0.574 |
 | plain xpsnr | 1.036 | 0.508 | 0.816 | 0.531 |
 | plain vmaf_neg | 1.028 | 0.553 | 0.814 | 0.574 |
 | plain cvvdp | 1.034 | 0.516 | 0.719 | 0.532 |
 | plain butter3 | 1.028 | 0.542 | 0.719 | 0.571 |
 
-**clean**
+**Clean (source grain sigma below 0.3)** (187 showings)
 
 | score | held-out log loss | cross-scene | within-scene | AUC (pass) |
 |---|---|---|---|---|
-| GRAILS full | 1.130 | 0.657 | 0.874 | 0.754 |
-| GRAILS fast | 1.133 | 0.657 | 0.874 | 0.752 |
-| XPSNR base full | 1.147 | 0.637 | 0.906 | 0.721 |
-| XPSNR base fast | 1.154 | 0.659 | 0.890 | 0.743 |
-| VMAF-NEG base full | 1.325 | 0.639 | 0.898 | 0.716 |
-| VMAF-NEG base fast | 1.398 | 0.665 | 0.913 | 0.758 |
-| CVVDP base full | 1.334 | 0.609 | 0.764 | 0.685 |
-| CVVDP base fast | 1.306 | 0.617 | 0.748 | 0.684 |
-| Butteraugli base full | 1.102 | 0.636 | 0.850 | 0.744 |
-| Butteraugli base fast | 1.104 | 0.642 | 0.850 | 0.747 |
-| plain ssimu2 | 1.131 | 0.658 | 0.874 | 0.754 |
-| plain xpsnr | 1.148 | 0.636 | 0.906 | 0.720 |
-| plain vmaf_neg | 1.329 | 0.640 | 0.898 | 0.717 |
-| plain cvvdp | 1.343 | 0.612 | 0.764 | 0.689 |
-| plain butter3 | 1.102 | 0.638 | 0.850 | 0.746 |
+| GRAILS full | 1.109 | 0.657 | 0.874 | 0.754 |
+| GRAILS fast | 1.113 | 0.657 | 0.874 | 0.752 |
+| XPSNR base full | 1.214 | 0.637 | 0.906 | 0.721 |
+| XPSNR base fast | 1.262 | 0.659 | 0.890 | 0.743 |
+| VMAF-NEG base full | 1.230 | 0.639 | 0.898 | 0.716 |
+| VMAF-NEG base fast | 1.262 | 0.665 | 0.913 | 0.758 |
+| CVVDP base full | 1.240 | 0.609 | 0.764 | 0.685 |
+| CVVDP base fast | 1.212 | 0.617 | 0.748 | 0.684 |
+| Butteraugli base full | 1.096 | 0.636 | 0.850 | 0.744 |
+| Butteraugli base fast | 1.095 | 0.642 | 0.850 | 0.747 |
+| plain ssimu2 | 1.057 | 0.658 | 0.874 | 0.754 |
+| plain xpsnr | 1.090 | 0.636 | 0.906 | 0.720 |
+| plain vmaf_neg | 1.079 | 0.640 | 0.898 | 0.717 |
+| plain cvvdp | 1.050 | 0.612 | 0.764 | 0.689 |
+| plain butter3 | 1.051 | 0.638 | 0.850 | 0.746 |
 
-**grainy**
-
-| score | held-out log loss | cross-scene | within-scene | AUC (pass) |
-|---|---|---|---|---|
-| GRAILS full | 0.886 | 0.684 | 0.823 | 0.710 |
-| GRAILS fast | 0.840 | 0.698 | 0.861 | 0.728 |
-| XPSNR base full | 1.175 | 0.585 | 0.873 | 0.666 |
-| XPSNR base fast | 1.070 | 0.613 | 0.886 | 0.678 |
-| VMAF-NEG base full | 0.987 | 0.665 | 0.709 | 0.661 |
-| VMAF-NEG base fast | 0.926 | 0.694 | 0.861 | 0.701 |
-| CVVDP base full | 0.996 | 0.643 | 0.709 | 0.647 |
-| CVVDP base fast | 0.950 | 0.650 | 0.848 | 0.667 |
-| Butteraugli base full | 0.860 | 0.728 | 0.873 | 0.771 |
-| Butteraugli base fast | 0.862 | 0.735 | 0.873 | 0.770 |
-| plain ssimu2 | 1.034 | 0.641 | 0.772 | 0.682 |
-| plain xpsnr | 0.916 | 0.600 | 0.861 | 0.667 |
-| plain vmaf_neg | 1.065 | 0.691 | 0.873 | 0.732 |
-| plain cvvdp | 1.288 | 0.641 | 0.747 | 0.670 |
-| plain butter3 | 1.113 | 0.630 | 0.734 | 0.680 |
-
-**anime**
+**Grainy (source grain sigma 0.8 or more)** (109 showings)
 
 | score | held-out log loss | cross-scene | within-scene | AUC (pass) |
 |---|---|---|---|---|
-| GRAILS full | nan | 0.903 | 0.860 | 0.933 |
-| GRAILS fast | nan | 0.905 | 0.860 | 0.933 |
-| XPSNR base full | nan | 0.841 | 0.895 | 0.884 |
-| XPSNR base fast | nan | 0.920 | 0.907 | 0.939 |
-| VMAF-NEG base full | nan | 0.703 | 0.895 | 0.799 |
-| VMAF-NEG base fast | nan | 0.852 | 0.907 | 0.917 |
-| CVVDP base full | nan | 0.695 | 0.791 | 0.770 |
-| CVVDP base fast | nan | 0.732 | 0.756 | 0.782 |
-| Butteraugli base full | nan | 0.834 | 0.895 | 0.924 |
-| Butteraugli base fast | nan | 0.845 | 0.895 | 0.927 |
-| plain ssimu2 | nan | 0.903 | 0.860 | 0.933 |
-| plain xpsnr | nan | 0.841 | 0.895 | 0.884 |
-| plain vmaf_neg | nan | 0.703 | 0.895 | 0.799 |
-| plain cvvdp | nan | 0.695 | 0.791 | 0.770 |
-| plain butter3 | nan | 0.834 | 0.895 | 0.924 |
+| GRAILS full | 0.903 | 0.672 | 0.823 | 0.695 |
+| GRAILS fast | 0.851 | 0.694 | 0.861 | 0.725 |
+| XPSNR base full | 1.084 | 0.571 | 0.873 | 0.657 |
+| XPSNR base fast | 0.989 | 0.596 | 0.873 | 0.664 |
+| VMAF-NEG base full | 0.918 | 0.673 | 0.696 | 0.668 |
+| VMAF-NEG base fast | 0.883 | 0.692 | 0.848 | 0.701 |
+| CVVDP base full | 0.929 | 0.668 | 0.785 | 0.675 |
+| CVVDP base fast | 0.912 | 0.680 | 0.848 | 0.698 |
+| Butteraugli base full | 0.859 | 0.712 | 0.848 | 0.752 |
+| Butteraugli base fast | 0.830 | 0.725 | 0.873 | 0.761 |
+| plain ssimu2 | 0.968 | 0.641 | 0.772 | 0.682 |
+| plain xpsnr | 0.970 | 0.600 | 0.861 | 0.667 |
+| plain vmaf_neg | 0.961 | 0.691 | 0.873 | 0.732 |
+| plain cvvdp | 1.007 | 0.641 | 0.747 | 0.670 |
+| plain butter3 | 0.968 | 0.630 | 0.734 | 0.680 |
 
-The "anime" rows are the line-art film (Your Name (2016)) without the line-art path; with it, GRAILS's held-out log
-loss there drops from 1.02 to 0.73-0.75 (leave-one-scene-out / leave-one-round-out; it cannot be held out by film,
-being the only line-art film).
+**Your Name (2016), line art, without the line-art path** (121 showings)
+
+| score | held-out log loss | cross-scene | within-scene | AUC (pass) |
+|---|---|---|---|---|
+| GRAILS full | 1.074 | 0.903 | 0.860 | 0.933 |
+| GRAILS fast | 1.097 | 0.905 | 0.860 | 0.933 |
+| XPSNR base full | 1.304 | 0.841 | 0.895 | 0.884 |
+| XPSNR base fast | 1.383 | 0.920 | 0.907 | 0.939 |
+| VMAF-NEG base full | 1.136 | 0.703 | 0.895 | 0.799 |
+| VMAF-NEG base fast | 1.193 | 0.852 | 0.907 | 0.917 |
+| CVVDP base full | 1.192 | 0.695 | 0.791 | 0.770 |
+| CVVDP base fast | 1.190 | 0.732 | 0.756 | 0.782 |
+| Butteraugli base full | 1.057 | 0.834 | 0.895 | 0.924 |
+| Butteraugli base fast | 1.081 | 0.845 | 0.895 | 0.927 |
+| plain ssimu2 | 1.085 | 0.903 | 0.860 | 0.933 |
+| plain xpsnr | 1.144 | 0.841 | 0.895 | 0.884 |
+| plain vmaf_neg | 1.119 | 0.703 | 0.895 | 0.799 |
+| plain cvvdp | 1.072 | 0.695 | 0.791 | 0.770 |
+| plain butter3 | 1.077 | 0.834 | 0.895 | 0.924 |
+
+The Your Name (2016) rows are without the line-art path: on these 574 showings no other line-art film is left to
+learn it from when Your Name is held out. With the line-art path, see "Line art" below.
 
 Differences against GRAILS (full), 95 % intervals from a paired bootstrap over the 48 scenes (log loss: lower is
-better; concordance and AUC: higher is better):
+better; concordance and AUC: higher is better). The bootstrap resamples scenes with every fold's fitted system held
+fixed, so the intervals leave out the uncertainty of fitting; and the concordance and AUC differences compare pooled
+held-out scores from different fold systems.
 
 | score | log loss difference | cross-scene concordance difference | AUC difference |
 |---|---|---|---|
-| GRAILS fast | -0.010 [-0.034, +0.011] | [-0.025, +0.036] | [-0.030, +0.033] |
-| XPSNR base full | +0.038 [-0.009, +0.081] | [-0.110, +0.008] | [-0.108, +0.004] |
-| XPSNR base fast | +0.022 [-0.012, +0.049] | [-0.123, -0.000] | [-0.124, -0.009] |
-| VMAF-NEG base full | +0.021 [-0.015, +0.049] | [-0.088, +0.031] | [-0.098, +0.030] |
-| VMAF-NEG base fast | +0.024 [-0.016, +0.056] | [-0.095, +0.038] | [-0.103, +0.037] |
-| CVVDP base full | +0.048 [+0.014, +0.072] | [-0.123, -0.007] | [-0.131, -0.021] |
-| CVVDP base fast | +0.052 [+0.011, +0.082] | [-0.137, +0.001] | [-0.157, -0.010] |
-| Butteraugli base full | -0.006 [-0.030, +0.016] | [-0.019, +0.033] | [-0.028, +0.036] |
-| Butteraugli base fast | -0.010 [-0.049, +0.026] | [-0.044, +0.067] | [-0.062, +0.062] |
-| plain ssimu2 | +0.054 [+0.012, +0.086] | [-0.192, -0.083] | [-0.195, -0.081] |
-| plain xpsnr | +0.061 [+0.015, +0.097] | [-0.251, -0.096] | [-0.257, -0.090] |
-| plain vmaf_neg | +0.053 [+0.007, +0.085] | [-0.201, -0.051] | [-0.215, -0.050] |
-| plain cvvdp | +0.059 [+0.012, +0.092] | [-0.226, -0.106] | [-0.236, -0.112] |
-| plain butter3 | +0.053 [+0.009, +0.083] | [-0.196, -0.085] | [-0.201, -0.078] |
+| GRAILS fast | -0.011 [-0.038, +0.010] | [-0.021, +0.036] | [-0.026, +0.035] |
+| XPSNR base full | +0.077 [-0.008, +0.139] | [-0.109, +0.004] | [-0.110, -0.001] |
+| XPSNR base fast | +0.071 [-0.017, +0.148] | [-0.125, +0.004] | [-0.125, -0.005] |
+| VMAF-NEG base full | +0.065 [+0.005, +0.131] | [-0.088, +0.031] | [-0.097, +0.029] |
+| VMAF-NEG base fast | +0.066 [+0.004, +0.134] | [-0.094, +0.040] | [-0.104, +0.035] |
+| CVVDP base full | +0.078 [+0.031, +0.124] | [-0.113, +0.000] | [-0.126, -0.013] |
+| CVVDP base fast | +0.061 [+0.014, +0.100] | [-0.124, +0.002] | [-0.142, -0.009] |
+| Butteraugli base full | -0.009 [-0.033, +0.015] | [-0.018, +0.024] | [-0.028, +0.026] |
+| Butteraugli base fast | -0.017 [-0.061, +0.021] | [-0.041, +0.060] | [-0.057, +0.059] |
+| plain ssimu2 | +0.034 [-0.024, +0.079] | [-0.194, -0.081] | [-0.196, -0.076] |
+| plain xpsnr | +0.041 [-0.016, +0.085] | [-0.243, -0.091] | [-0.250, -0.090] |
+| plain vmaf_neg | +0.033 [-0.022, +0.075] | [-0.198, -0.048] | [-0.208, -0.044] |
+| plain cvvdp | +0.039 [-0.026, +0.090] | [-0.228, -0.096] | [-0.242, -0.100] |
+| plain butter3 | +0.033 [-0.025, +0.081] | [-0.201, -0.083] | [-0.206, -0.079] |
 
-Two later validation rounds (pairs, votes only; the score agrees when it rates the voted encode higher):
+Clearly worse than GRAILS full (interval excludes zero) in cross-scene concordance: every plain metric; in AUC:
+every plain metric and XPSNR base full, XPSNR base fast, CVVDP base full and CVVDP base fast; in log loss: VMAF-NEG
+base full, VMAF-NEG base fast, CVVDP base full and CVVDP base fast. No plain metric is clearly worse in log loss
+after the nested fix (plain SSIMULACRA2 +0.034 [-0.024, +0.079]; before it, every plain metric was): GRAILS's gain
+over plain metrics is in ranking, not in calibration of the verdict levels. Nothing is clearly better than GRAILS
+full.
+
+Two later validation rounds (pairs, votes only; the score agrees when it rates the voted encode higher; models fitted
+on all 574 showings, which these rounds are not part of):
 
 | score | Black Swan (2010): target encode vs earlier encode | Inglourious Basterds (2009): two full encodes |
 |---|---|---|
@@ -161,6 +186,61 @@ Two later validation rounds (pairs, votes only; the score agrees when it rates t
 | VMAF-NEG base full | 8/8 | 8/8 |
 | XPSNR base fast | 8/8 | 8/8 |
 | XPSNR base full | 7/8 | 8/8 |
+
+### Line art
+
+2D line art gets an extra term for ringing and halos next to the ink lines (detector and penalty from the source;
+GRAILS only). The released design (grain model and line-art path) is evaluated here on 616 showings, refitted in
+each fold: the 574 above plus one more blind round (42 showings) with Spirited Away (2001), Chainsaw Man - The
+Movie: Reze Arc (2025) and Your Name, so three line-art films with 163 showings. Released GRAILS (grain model and
+line-art path), nested, held out by film, against plain SSIMULACRA2 with its mapping fitted on the other films:
+
+| showings | score | held-out log loss | cross-scene | within-scene | AUC (pass) |
+|---|---|---|---|---|---|
+| all 616 | GRAILS | 0.936 | 0.706 | 0.829 | 0.737 |
+| all 616 | SSIMULACRA2 | 1.032 | 0.548 | 0.776 | 0.571 |
+| the 574 above | GRAILS | 0.933 | 0.704 | 0.822 | 0.733 |
+| the 574 above | SSIMULACRA2 | 1.027 | 0.546 | 0.757 | 0.574 |
+| line art (163) | GRAILS | 0.817 | 0.830 | 0.911 | 0.887 |
+| line art (163) | SSIMULACRA2 | 1.082 | 0.753 | 0.881 | 0.813 |
+
+On the 574 showings the released system does better than the flavour table's GRAILS full (0.995 / 0.680) because the
+line-art path, learned from the other two line-art films, now also applies when Your Name is held out.
+
+Line-art log loss with the held-out unit changed (everything refitted in each fold): by film 0.817, by scene 0.787,
+by review round 0.791; base rate 1.055; plain SSIMULACRA2 1.082. Line art against everything else, cross-scene:
+0.739. Pair votes (which of two encodes looks closer to the source): 11 of 14 agree with the reviewer (4/4 in the
+last round, each pair scored by the system that never saw its film; 6/9 and 1/1 in two later rounds, scored by the
+system fitted on all 616 showings).
+
+By content class (the same held-out scores; "clean" = source grain sigma at most 0.25; within-scene pairs in
+brackets):
+
+| content | showings | films | GRAILS log loss | SSIMULACRA2 log loss | GRAILS cross-scene | SSIMULACRA2 cross-scene | GRAILS within-scene | SSIMULACRA2 within-scene | GRAILS AUC | SSIMULACRA2 AUC |
+|---|---|---|---|---|---|---|---|---|---|---|
+| clean live action + CGI | 34 | 4 | 1.064 | 1.063 | 0.743 | 0.743 | 0.852 (23/27) | 0.852 (23/27) | 0.792 | 0.792 |
+| grainy live action + CGI | 419 | 11 | 0.972 | 1.010 | 0.668 | 0.535 | 0.783 (198/253) | 0.711 (180/253) | 0.688 | 0.556 |
+| clean line art | 135 | 1 | 0.777 | 1.074 | 0.889 | 0.844 | 0.922 (94/102) | 0.863 (88/102) | 0.926 | 0.903 |
+| grainy line art | 28 | 2 | 1.009 | 1.120 | 0.695 | 0.670 | 0.879 (29/33) | 0.939 (31/33) | 0.817 | 0.744 |
+
+**Grainy line art is GRAILS's weak spot.** On grainy 2D animation (28 showings: two scenes each of Spirited Away and
+Chainsaw Man) GRAILS fits the verdicts better than plain SSIMULACRA2 across scenes (log loss 1.009 against 1.120,
+AUC 0.82 against 0.74) but ranks encodes of the same scene worse: 29 of 33 within-scene pairs, against 31 of 33 for
+SSIMULACRA2. The line-art detector reads the source, where grain hides the lines (on Spirited Away it does not
+fire), so there GRAILS is SSIMULACRA2 plus the grain model, and the grain model credits an encode that keeps the
+source's grain as coded detail. The same round's Spirited Away scenes, scored with the released GRAILS 0.2.1 (fitted
+before that round), show it plainly: the failed x265 encode scored highest on one scene (75.3, against 67.6 for the
+passing SVT-AV1 preset 2 encode) and level with preset 2 on the other (75.7 against 75.9), while plain SSIMULACRA2
+ranked no failed encode above a passed one on either. To rank encodes of grainy 2D animation, use plain SSIMULACRA2
+until a model fixes this.
+
+Two fixes were tested for 0.3.0, nested on the same 616 showings, and not adopted: (1) damping the grain model by a
+line-art detector run on the denoised source (g -> g (1 - a)): grainy line art within scene ties SSIMULACRA2
+(0.939), but the detector also fires on 16 of 25 Dune (2021) showings, grainy live action drops (within
+scene 0.783 -> 0.763) and line-art log loss rises (0.817 ->
+0.826); (2) the same plus the grain-robust ringing measure (detector on the denoised source,
+magnitudes on a PQ scale for SDR): line-art log loss 0.927. A live-action veto could not be built
+from the detector's statistics: Dune's scenes reach the same ink and flat-area values as the anime scenes.
 
 ### How the flavours relate: correlation over all showings and subsets
 
