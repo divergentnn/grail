@@ -103,7 +103,7 @@ worst-rated last, with an earlier seed pick second and the encoder's own seeds t
 GRAILS scores the grain the encode describes, drawn over the whole frame, so the seeds don't change the score. Its
 separate **standard-decoder seed view** rates each frame's seed for the clumps and holes of its grain patch (and flags
 seeds that make striped patches), from 0 (best) to 100 (worst). It is uncalibrated and never part of the score; on the
-blind seed tests, it puts 12 of 15 judged pairs of versions in the viewer's order (14 of 15 with an earlier version of the seed table that also counted repetition, which the viewer does not mind).
+blind seed tests, with the seed table in this release (model 0.2.1) it put 14 of 15 judged pairs of versions in the viewer's order. This release's table also counts how much a seed's patch repeats; the next release (0.2.2) drops that, since the viewer minds clumps and holes, not repetition, and its table orders 12 of the 15 pairs correctly.
 
 | Black Swan (2010), whole scene, 240 frames | SSIMULACRA2 | GRAILS | seed view (mean) | frames with a seed in the worst tenth |
 |---|---|---|---|---|
