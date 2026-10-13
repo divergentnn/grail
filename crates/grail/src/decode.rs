@@ -85,7 +85,7 @@ pub struct DecodeSpec {
     pub crop: Option<[usize; 4]>,
     pub grain: Grain,
     pub threads: usize,
-    /// NVDEC (ffmpeg -hwaccel cuda; frames come back to system memory)
+    /// hardware decoding (ffmpeg -hwaccel cuda, or videotoolbox on macOS; frames come back to system memory)
     pub hwaccel: bool,
     /// frame size of the output (crop or the whole frame)
     pub w: usize,
@@ -102,8 +102,9 @@ pub struct Decoder {
 
 /// check that a directory holds the av1-fullgrain build of libdav1d
 pub fn check_fullgrain_lib(dir: &Path) -> Result<()> {
-    let so = ["libdav1d.so.7", "libdav1d.so"].iter().map(|n| dir.join(n)).find(|p| p.exists())
-        .ok_or_else(|| anyhow!("{}: no libdav1d.so.7 there", dir.display()))?;
+    let names: &[&str] = if cfg!(target_os = "macos") { &["libdav1d.7.dylib"] } else { &["libdav1d.so.7", "libdav1d.so"] };
+    let so = names.iter().map(|n| dir.join(n)).find(|p| p.exists())
+        .ok_or_else(|| anyhow!("{}: no {} there", dir.display(), names[0]))?;
     let bytes = std::fs::read(&so)?;
     if !bytes.windows(16).any(|w| w == b"DAV1D_GRAIN_MODE") {
         bail!("{}: not the av1-fullgrain build (no full-frame grain mode)", so.display());
@@ -125,7 +126,7 @@ impl Decoder {
         cmd.args(["-hide_banner", "-nostats", "-nostdin", "-v", if showinfo { "info" } else { "error" }]);
         cmd.args(["-threads", &spec.threads.to_string()]);
         if spec.hwaccel {
-            cmd.args(["-hwaccel", "cuda"]);
+            cmd.args(["-hwaccel", if cfg!(target_os = "macos") { "videotoolbox" } else { "cuda" }]);
         }
         if spec.av1 {
             cmd.args(["-c:v", "libdav1d"]);
@@ -143,9 +144,12 @@ impl Decoder {
                 cmd.env("DAV1D_GRAIN_FORCE", "0");
             }
             Grain::FullFrame(dir) => {
-                let old = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+                // the av1-fullgrain libdav1d replaces the system one in ffmpeg (dyld searches DYLD_LIBRARY_PATH for
+                // the library's file name before its install path)
+                let var = if cfg!(target_os = "macos") { "DYLD_LIBRARY_PATH" } else { "LD_LIBRARY_PATH" };
+                let old = std::env::var(var).unwrap_or_default();
                 let lp = if old.is_empty() { dir.display().to_string() } else { format!("{}:{old}", dir.display()) };
-                cmd.env("LD_LIBRARY_PATH", lp).env("DAV1D_GRAIN_MODE", "full").env("DAV1D_GRAIN_FORCE", "1");
+                cmd.env(var, lp).env("DAV1D_GRAIN_MODE", "full").env("DAV1D_GRAIN_FORCE", "1");
             }
             Grain::Plain => {}
         }

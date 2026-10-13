@@ -74,7 +74,12 @@ impl Vship {
         if let Ok(p) = std::env::var("GRAIL_VSHIP") {
             cands.push(p);
         }
-        cands.extend(["libvship.so".into(), "/usr/local/lib/libvship.so".into(), "/usr/lib/libvship.so".into()]);
+        if cfg!(target_os = "macos") {
+            cands.extend(["libvship.dylib".into(), "/opt/homebrew/lib/libvship.dylib".into(),
+                          "/usr/local/lib/libvship.dylib".into(), "libvship.so".into()]);
+        } else {
+            cands.extend(["libvship.so".into(), "/usr/local/lib/libvship.so".into(), "/usr/lib/libvship.so".into()]);
+        }
         let mut errs = vec![];
         for p in &cands {
             match unsafe { Library::new(p) } {

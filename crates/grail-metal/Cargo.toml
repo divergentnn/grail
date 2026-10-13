@@ -1,0 +1,18 @@
+[package]
+name = "grail-metal"
+description = "GRAIL stages on Apple GPUs (Metal): flowdegrain2 measurement denoiser, grain features, line-art path"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+grail-stages = { path = "../grail-stages" }
+anyhow.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.3"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSError"] }
+objc2-metal = { version = "0.3.2", default-features = false, features = [
+    "std", "objc2-core-foundation", "MTLDevice", "MTLBuffer", "MTLResource", "MTLLibrary", "MTLCommandQueue", "MTLCommandBuffer",
+    "MTLCommandEncoder", "MTLComputeCommandEncoder", "MTLComputePipeline", "MTLTypes", "MTLAllocation",
+] }

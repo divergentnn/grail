@@ -1,5 +1,7 @@
 //! GRAIL GPU stages. The kernels are plain CUDA C++ (kernels/ at the repository root), compiled by build.rs with
 //! nvcc (or hipcc for the HIP build), embedded in the binary and launched through the driver API loaded at run time.
+#![cfg(not(target_os = "macos"))]
+// (on macOS the crate is empty: no CUDA / HIP there; grail uses grail-metal)
 pub mod backend;
 pub mod buf;
 pub mod denoise;

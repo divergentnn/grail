@@ -52,6 +52,8 @@ pub enum HwDec {
     None,
     /// NVDEC for every non-AV1 stream (AV1 stays on dav1d: full-frame grain needs it)
     Cuda,
+    /// VideoToolbox (macOS) for every non-AV1 stream
+    VideoToolbox,
 }
 
 #[derive(Clone, Debug, Serialize, Default)]
@@ -339,7 +341,7 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
 
     let hw = |p: &Probe| p.codec != "av1" && match o.hwdec {
         HwDec::None => false,
-        HwDec::Cuda => true,
+        HwDec::Cuda | HwDec::VideoToolbox => true,
         HwDec::Auto => p.width > 2048,
     };
     // host memory for decoded frames: the reference's frames are kept for the active-picture scan up to this budget

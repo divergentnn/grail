@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/grail-stages", "crates/grail-gpu", "crates/grail"]
+members = ["crates/grail-stages", "crates/grail-gpu", "crates/grail-metal", "crates/grail"]
 
 [workspace.package]
 version = "0.1.0-beta.1"

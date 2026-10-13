@@ -35,6 +35,10 @@ fn run(mut cmd: Command, what: &str) {
 }
 
 fn main() {
+    // macOS has no CUDA / HIP: the crate is empty there (grail uses grail-metal)
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        return;
+    }
     let man = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let kdir = man.join("../../kernels").canonicalize().expect("kernels/ directory");
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());

@@ -75,7 +75,8 @@ enum Cmd {
         /// plain SSIMULACRA2 with chroma siting "left" on both sides instead of each file's own siting
         #[arg(long)]
         siting_left: bool,
-        /// hardware decode: auto (NVDEC above 2048 px width for non-AV1 streams), none, cuda
+        /// hardware decode: auto (NVDEC above 2048 px width / VideoToolbox on macOS, for non-AV1 streams), none, cuda,
+        /// videotoolbox
         #[arg(long, default_value = "auto")]
         hwdec: String,
     },
@@ -99,7 +100,7 @@ enum Cmd {
         /// write the comparison as JSON
         #[arg(long)]
         out: Option<PathBuf>,
-        /// hardware decode: none (default here: the reference decoded in software), auto, cuda
+        /// hardware decode: none (default here: the reference decoded in software), auto, cuda, videotoolbox
         #[arg(long, default_value = "none")]
         hwdec: String,
         /// only every N-th case (with --offset)
@@ -118,8 +119,17 @@ fn parse_hwdec(s: &str) -> Result<score::HwDec> {
         "auto" => score::HwDec::Auto,
         "none" | "sw" | "software" => score::HwDec::None,
         "cuda" | "nvdec" => score::HwDec::Cuda,
-        x => bail!("--hwdec: auto, none or cuda, not {x}"),
+        "videotoolbox" | "vt" => score::HwDec::VideoToolbox,
+        x => bail!("--hwdec: auto, none, cuda or videotoolbox, not {x}"),
     })
+}
+
+/// the GPU backend of this platform: Metal on macOS, CUDA / HIP (GRAIL_BACKEND) elsewhere
+pub fn new_backend() -> Result<Box<dyn grail_stages::Backend>> {
+    #[cfg(target_os = "macos")]
+    return Ok(Box::new(grail_metal::MetalBackend::new()?));
+    #[cfg(not(target_os = "macos"))]
+    return Ok(Box::new(grail_gpu::GpuBackend::new()?));
 }
 
 pub fn parse_colour(s: &str) -> Result<vship::Colour> {
@@ -143,7 +153,18 @@ pub fn parse_rect(s: &str) -> Result<[usize; 4]> {
 }
 
 fn main() {
-    if let Err(e) = run() {
+    // libvship's Vulkan build runs on MoltenVK on macOS: MoltenVK's fast math moves SSIMULACRA2 by up to 0.05 points
+    // per frame against the CUDA build; without it the difference is below 0.01. Set before any thread starts.
+    #[cfg(target_os = "macos")]
+    if std::env::var_os("MVK_CONFIG_FAST_MATH_ENABLED").is_none() {
+        std::env::set_var("MVK_CONFIG_FAST_MATH_ENABLED", "0");
+    }
+    let r = run();
+    #[cfg(target_os = "macos")]
+    if let Some(rep) = grail_metal::driver::opened().and_then(|g| g.profile_report()) {
+        eprintln!("{rep}");
+    }
+    if let Err(e) = r {
         eprintln!("grail: {e:#}");
         std::process::exit(1);
     }
@@ -175,8 +196,8 @@ fn run() -> Result<()> {
             if let Some(list) = batch {
                 return batch::run(&list, out.as_deref(), &o, json, &model);
             }
-            let backend = grail_gpu::GpuBackend::new()?;
-            let r = score::score(&o, &model, &backend)?;
+            let backend = new_backend()?;
+            let r = score::score(&o, &model, backend.as_ref())?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&r)?);
             } else {
@@ -188,9 +209,9 @@ fn run() -> Result<()> {
             check::set_hwdec(parse_hwdec(&hwdec)?);
             match fast_variants {
                 Some(v) => check::run_fast(&file, &v, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model,
-                                           &grail_gpu::GpuBackend::new()?)?,
+                                           new_backend()?.as_ref())?,
                 None => check::run(&file, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model, every, offset,
-                                   &grail_gpu::GpuBackend::new()?)?,
+                                   new_backend()?.as_ref())?,
             }
         }
     }
@@ -234,13 +255,14 @@ fn denoise_y4m(input: &std::path::Path, output: &std::path::Path) -> Result<()> 
     }
     let w: usize = tag('W').unwrap_or_default().parse()?;
     let h: usize = tag('H').unwrap_or_default().parse()?;
-    let g = grail_gpu::try_init()?;
-    g.bind_thread()?;
-    let mut den = grail_gpu::denoise::Denoiser::new(w, h)?;
-    let out = grail_gpu::DBuf::new(w * h * 3)?;
-    let mut host = vec![0u16; w * h * 3 / 2];
-    wr.write_all(hdr.as_bytes())?;
+    let backend = new_backend()?;
+    let mut den = backend.denoiser(w, h)?;
     let fsz = w * h * 3 / 2;
+    let full = [0, 0, w, h];
+    let mut win = grail_stages::Win::new(w, h);
+    // frames waiting for their denoised output (produce_window takes the original frame)
+    let mut pending: std::collections::VecDeque<Vec<u16>> = Default::default();
+    wr.write_all(hdr.as_bytes())?;
     let mut eof = false;
     loop {
         while !eof && den.ready().is_none() {
@@ -257,14 +279,15 @@ fn denoise_y4m(input: &std::path::Path, output: &std::path::Path) -> Result<()> 
             let bytes = unsafe { std::slice::from_raw_parts_mut(f.as_mut_ptr() as *mut u8, fsz * 2) };
             rd.read_exact(bytes)?;
             den.push(&f)?;
+            pending.push_back(f);
         }
         if den.ready().is_none() {
             break;
         }
-        den.step(true, &out)?;
-        out.read(&mut host)?;
+        let orig = pending.pop_front().expect("pushed frame");
+        den.produce_window(&orig, full, full, &mut win)?;
         wr.write_all(b"FRAME\n")?;
-        let bytes = unsafe { std::slice::from_raw_parts(host.as_ptr() as *const u8, fsz * 2) };
+        let bytes = unsafe { std::slice::from_raw_parts(win.host.as_ptr() as *const u8, fsz * 2) };
         wr.write_all(bytes)?;
     }
     wr.flush()?;
