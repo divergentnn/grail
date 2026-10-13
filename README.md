@@ -133,7 +133,7 @@ rates the seeds for standard players.
 - **Clean footage costs nothing.** With no grain and no line art, GRAILS is SSIMULACRA2, exactly.
 
 Typical uses: comparing CRFs, presets or encoders on the same scene; checking film-grain settings; scoring scenes in a
-target-quality encode (batch mode and JSON output make that easy).
+target-quality encode (batch mode and JSON output make that easy; a batch resumes where it stopped).
 
 ## Quick start
 
@@ -216,10 +216,13 @@ most of its speed.
   rings around the lines. In the blind tests, GRAILS scored a failed x265 encode of one such scene above a passing
   SVT-AV1 one (75.3 against 67.6), where plain SSIMULACRA2 had the passing one ahead, if only just (78.89 against
   78.85). For grainy animation, check plain SSIMULACRA2 and your own eyes too.
-- The encode must have the source's resolution and frame rate, or be a crop of it.
-- HDR: HDR10 (PQ) only.
+- **Inputs.** The encode must have the source's resolution and frame rate, or be a crop of it. grail checks both
+  files before scoring and rejects, with a message, what it can't score faithfully: odd frame sizes or windows,
+  full-range video, formats other than 8- or 10-bit YUV, and colour other than BT.709 SDR or HDR10 (PQ) unless
+  `--colour sdr|pq` says how to read it ([details](docs/technical.md#limits)).
 - Scoring AV1 encodes that use film-grain synthesis needs the [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)
-  decoder build. Without it, grail refuses to score them rather than score the wrong grain.
+  decoder build. Without it, grail refuses to score them rather than score the wrong grain. `grail inspect-grain
+  FILE` tells you whether an AV1 file's frames apply film grain.
 - **Version numbers.** Every score is printed with its model: GRAILS model 0.2.1 today. While GRAILS is below 1.0,
   any change that moves scores bumps the middle number (the next model will be 0.3.0), so scores are only comparable
   within one model version. 1.0 comes when calibration from other viewers is in and the scores are stable. The tool

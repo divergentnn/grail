@@ -15,11 +15,18 @@ grail score --ref SOURCE --dist ENCODE [--fast [--denoise-candidate]] [--start N
   `--fast --denoise-candidate` keeps the denoise (frame subsampling only): use it, or the full mode, as an encode
   target on heavy grain.
 - `--json`: everything, including per-frame SSIMULACRA2, structure and line-art values and the stage timings.
-- `--colour sdr|pq`: overrides the colour handling read from the source (PQ: BT.2020 + SMPTE 2084).
+- `--colour sdr|pq`: overrides the colour handling read from the source (PQ: BT.2020 + SMPTE 2084); also the way to
+  score files whose colour tags grail would otherwise reject (HLG, BT.601 matrices, BT.2020 SDR).
 - `--hwdec auto|none|cuda|videotoolbox`: NVDEC (Linux) or VideoToolbox (macOS) for non-AV1 streams (auto: above
   2048 px width). AV1 stays on dav1d.
 - `--threads N`: ffmpeg threads per decoder (up to three decoders run at once).
 - `--siting-left`: plain SSIMULACRA2 with chroma siting "left" on both sides instead of each file's own siting (see [technical.md](technical.md#exactness-against-the-python-reference)).
+
+Inputs are checked before anything is scored, and a file grail can't score faithfully is rejected with a message:
+odd frame sizes, windows or window origins (4:2:0 needs even ones); pixel formats other than 8- or 10-bit YUV (4:2:2
+and 4:4:4 are converted to 4:2:0; RGB, grey and deeper formats are rejected); full-range video (`pc`, `yuvj`); colour
+other than BT.709 SDR or HDR10 (PQ, BT.2020), unless `--colour` says how to read it; source and encode must agree.
+Details: [technical.md](technical.md#limits).
 
 Many pairs (one GPU initialization; resumable with `--out`):
 

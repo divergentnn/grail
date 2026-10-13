@@ -62,7 +62,8 @@ if wfiles:
     sp = sum((x - ma) * (y - mb) for x, y in zip(ra, rb)) / (sum((x - ma) ** 2 for x in ra) * sum((y - mb) ** 2 for y in rb)) ** 0.5
     nf = len(d.get("failures", []))
     films = sorted({r["case"] for r in rows})
-    part = "all" if len(rows) + nf >= 574 else f"every 4th ({len(rows)})"
+    part = ("all" if len(rows) + nf >= 574 else f"every 4th ({len(rows)})" if len(wfiles) == 1 else
+            f"{len(rows)} ({len(wfiles)} of the 4 every-4th shards)")
     txt = txt.replace("WHOLESET_LINE", f"Whole-set check (PORT_SPEC gate: Spearman >= 0.995): {part} of the 574 judged showings "
                       f"({len(films)} films, full mode): Spearman between the port's and the reference's Q "
                       f"{sp:.6f}; |dQ| median {dq[len(dq)//2]:.1e}, max {dq[-1]:.4f}; {nf} failed to run.")

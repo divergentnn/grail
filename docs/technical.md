@@ -36,7 +36,8 @@ comparison of its statistics where it does:
   flat colour, from the source only); `p_L` is ringing that the encode adds next to the source's lines.
 
 With no grain above the threshold (`sigma_g <= 0.25`, so `g = 0`) and no line art (`a = 0`), GRAILS **is**
-SSIMULACRA2, exactly. In between, the score moves smoothly toward the grain-aware form. `Q <= 100` always; it reads in SSIMULACRA2 points.
+SSIMULACRA2, exactly. In between, the score moves smoothly toward the grain-aware form. `Q <= 100` always; it reads
+in SSIMULACRA2 points.
 
 Outputs: the GRAILS score; its parts (plain SSIMULACRA2, structure, the grain term `-sum w p`, the line-art term);
 the structure path (`synth` or `coded`); `g` and `sigma_g`; every penalty and raw feature; per-frame values with
@@ -85,13 +86,13 @@ candidate for a second release once more verdicts exist; the letter keeps the tw
 - The structure term is distance to the measurement denoiser's output, not to the true clean picture; the line-art
   path rests on one 2D film (Your Name (2016)); the score's top is flat at 100 on heavy grain (differences there come
   from the penalties only). Details: the model notes (`GRAINSCORE.md` in the lab).
-- The encode must have the source's resolution and frame rate, or be a crop of it; there is no scaling
-  (`--dist-start` aligns differing frame numbers). Inputs are checked before scoring, and rejected with a message:
-  frame sizes must be even (4:2:0), windows and their origins even; pixel format 8- or 10-bit YUV (4:2:2 and 4:4:4
-  are converted to 4:2:0 by ffmpeg, as the reference did; RGB, grey and deeper formats are rejected); limited range only (full-range video, `pc` / `yuvj`, is never accepted); SDR read as
-  BT.709 (matrix and primaries BT.709 or unspecified; BT.709 / BT.601 transfer) and HDR as HDR10 (PQ, BT.2020).
-  Other matrices, primaries or transfers (HLG, BT.601 matrices, BT.2020 SDR) are rejected unless `--colour sdr|pq`
-  says how to read the file; source and encode must agree. HDR: PQ (HDR10) only.
+- The encode must have the source's resolution and frame rate, or be a crop of it; there is no scaling (`--dist-start`
+  aligns differing frame numbers). Inputs are checked before scoring, and rejected with a message: frame sizes must be
+  even (4:2:0), windows and their origins even; pixel format 8- or 10-bit YUV (4:2:2 and 4:4:4 are converted to 4:2:0 by
+  ffmpeg, as the reference did; RGB, grey and deeper formats are rejected); limited range only (full-range video, `pc` /
+  `yuvj`, is never accepted); SDR read as BT.709 (matrix and primaries BT.709 or unspecified; BT.709 / BT.601 transfer)
+  and HDR as HDR10 (PQ, BT.2020). Other matrices, primaries or transfers (HLG, BT.601 matrices, BT.2020 SDR) are
+  rejected unless `--colour sdr|pq` says how to read the file; source and encode must agree. HDR: PQ (HDR10) only.
 - Beta tool limits: Linux with NVIDIA (HIP compile-checked) and macOS on Apple silicon (Metal); frame-accurate seeking
   is by decoding from the start of the file; AV1 film grain needs the
   [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) dav1d build (a self-contained GPU grain renderer is
