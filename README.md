@@ -149,9 +149,21 @@ Frames per second scored, 88 frames of the whole picture (4K with hardware decod
 | NVIDIA RTX 3090 | 24.7 | 41.7 | 8.6 | 16.9 |
 | Apple M1 Max | 14.7 | 31.8 | 3.9 | 11.4 |
 
-<!-- TODO: exact FFVship frames/s from tools/bench_ffvship.py on a quiet machine -->
-GRAILS is several times slower than plain SSIMULACRA2 with FFVship. FFVship computes the metric alone; in GRAILS,
-SSIMULACRA2 itself takes only about 2 % of the time. GRAILS first has to separate the grain from the picture, in every frame of both videos, with a
+Next to plain SSIMULACRA2 with FFVship, on the same 3.7-second clips (RTX 3090, frames/s including start-up, software
+decoding; `tools/bench_ffvship.py`):
+
+| | 1080p | 4K HDR |
+|---|---|---|
+| FFVship (SSIMULACRA2 only) | 39.4 | 18.0 |
+| GRAILS full | 24.3 | 7.8 (8.7 with NVDEC) |
+| GRAILS fast | 39.8 | 13.5 (14.2 with NVDEC) |
+
+On a scene of this length, GRAILS's full mode is about 1.6x (1080p) to 2.3x (4K) slower than FFVship end to end; fast
+mode keeps up with FFVship at 1080p. FFVship's lead grows on long files, where its start-up cost is spread out (not
+measured here).
+
+Why GRAILS costs more: FFVship computes the metric alone, while in GRAILS SSIMULACRA2 itself takes only about 2 % of
+the time. GRAILS first has to separate the grain from the picture, in every frame of both videos, with a
 motion-compensated denoiser that searches the neighbouring frames for matching blocks: far more work than the metric
 itself. And the denoiser has to be good. A weak one leaves grain in the "clean" picture, so the grain gets punished
 again, or smears real detail, so real damage is missed; GRAILS's scores depend on it. That is why GRAILS needs a GPU:
