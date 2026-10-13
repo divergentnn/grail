@@ -4,7 +4,10 @@
 Each example is one scene of a blind review round: the source and two encodes the viewer judged, at the same frame
 and region. The scores come from this repository's grail (full mode) on exactly the frames and window the viewer saw
 (the round's own export: ref / encode lead frames, start and end, crop); the verdicts from the round's verdict file.
-Rerun with --rescore after a model update to refresh the numbers in the images and in examples.json (then update the README text).
+Rerun with --rescore after a model update to refresh the numbers in the images and in examples.json (then update the
+README and docs/examples.md text). Three kinds: a review round's group (source and encodes, the viewer's verdicts);
+"seeds" (one AV1 grain encode with its seeds rewritten, as standard players and as GRAILS render it, scored against the
+scene's source; the viewer's ordering from the lab's seed-round record); "table" (a round's group, scores only).
 
     GRAIL_LAB=<grain-lab dir> GRAIL_FULLGRAIN_LIB=<av1-fullgrain dav1d build/src> python3 tools/make_examples.py
         [--only ID] [--rescore] [--dump FRAME]
@@ -39,10 +42,32 @@ EXAMPLES = [
      "panels": [{"cand": "80e758ce12", "label": "A: grain smoothed away", "what": "AV1, no grain synthesis"},
                 {"cand": "0c7e063304", "label": "B: denoise + AV1 grain", "what": "denoised, AV1 film grain"}],
      "frame": 40, "region": [470, 170, 144, 196], "zoom": 2},
+    {"id": "grain-hunt", "film": "The Hunt (2012)", "round": "recal2-gate", "group": "recal2-gate-g03",
+     "panels": [{"cand": "2f3e7ed90e", "label": "A: grain smoothed away", "what": "AV1, no grain synthesis"},
+                {"cand": "0bbfd715e2", "label": "B: denoise + AV1 grain", "what": "denoised, AV1 film grain"}],
+     "frame": 75, "region": [640, 140, 96, 130], "zoom": 3},
     {"id": "lineart", "film": "Your Name (2016)", "round": "metric-m1-p14", "group": "metric-m1-p14-g01",
      "panels": [{"cand": "b0ac390c54", "label": "A: SVT-AV1 preset 6", "what": "SVT-AV1 4.2.0 preset 6"},
                 {"cand": "da8b0a4c40", "label": "B: SVT-AV1 preset 2", "what": "SVT-AV1 4.2.0 preset 2"}],
      "frame": 17, "region": [1792, 448, 96, 130], "zoom": 3},
+    # the same AV1 film-grain encode with its seeds rewritten in place (no re-encode): the worst- and best-rated seed
+    # per frame, as standard players render it, and the worst-seed copy rendered full-frame (what GRAILS scores); the
+    # viewer's ordering of these versions comes from the lab's seed-round record. Second row: the grain alone.
+    {"id": "seeds", "kind": "seeds", "film": "Black Swan (2010)", "ref": "scenes/black_swan_5786/src.mkv",
+     "versions": {"worst": "denoise/seeds/seeds_tmpl_worst.mkv", "best": "denoise/seeds/seeds_tmpl_best.mkv",
+                  "default": "denoise/gd/black_swan_5786_gd2_crf31.mkv"},
+     "ordering": ["grainscore/seed_rounds_check.json", "BS 5786 template round"],
+     "panels": [{"version": "worst", "render": "standard", "label": "A: worst-rated seeds",
+                 "sub": "standard AV1 grain"},
+                {"version": "best", "render": "standard", "label": "B: best-rated seeds", "sub": "standard AV1 grain"},
+                {"version": "worst", "render": "full", "label": "A, full-frame grain", "sub": "what GRAILS scores"}],
+     "crop": [0, 140, 1920, 800], "frame": 58, "region": [816, 64, 144, 120], "zoom": 2, "grain_gain": 6},
+    # clean footage: scores only (GRAILS equals SSIMULACRA2 when the source has no grain and no line art)
+    {"id": "clean", "kind": "table", "film": "1917 (2019)", "round": "metric-m1-p3", "group": "metric-m1-p3-g01",
+     "panels": [{"cand": "96995966a8", "label": "x264, CRF 13", "what": "x264 CRF 13"},
+                {"cand": "9b90513e25", "label": "x265, CRF 17", "what": "x265 CRF 17"},
+                {"cand": "bfce4f74b4", "label": "SVT-AV1, CRF 10", "what": "SVT-AV1 CRF 10"},
+                {"cand": "2c313ff973", "label": "SVT-AV1, CRF 17", "what": "SVT-AV1 CRF 17"}]},
 ]
 
 GAP = 8                      # px between panels
@@ -100,22 +125,41 @@ def score(grail, fg, sh, cid, rescore):
     return res
 
 
+def score_files(grail, fg, ref, dist, key, rescore):
+    """a whole scene file against its source (all frames, the active picture)"""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    f = CACHE / f"{key}.json"
+    if f.exists() and not rescore:
+        return json.loads(f.read_text())
+    cmd = ["nice", "-n", "15", str(grail), "score", "--ref", str(ref), "--dist", str(dist), "--threads", "1",
+           "--fullgrain-lib", str(fg), "--json"]
+    print("scoring", key, flush=True)
+    res = json.loads(subprocess.run(cmd, check=True, capture_output=True, text=True).stdout)
+    f.write_text(json.dumps(res))
+    return res
+
+
 def is_av1(path):
     o = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name",
                         "-of", "csv=p=0", path], check=True, capture_output=True, text=True).stdout
     return o.strip() == "av1"
 
 
-def frame_rgb(path, n, crop, colour, fg):
+def frame_rgb(path, n, crop, colour, fg, grain="full"):
     """frame n of the file, cropped to the shown window, as 8-bit RGB; AV1 film grain rendered full-frame (the
-    av1-fullgrain dav1d replaces the system libdav1d), PQ tone-mapped for the picture only (scores use PQ as is)"""
+    av1-fullgrain dav1d replaces the system libdav1d) or, with grain="standard", as standard AV1 grain (the
+    av1-fullgrain build in its conformant mode, identical to stock dav1d); PQ tone-mapped for the picture only (scores
+    use PQ as is)"""
     x, y, w, h = crop
     env = {k: v for k, v in os.environ.items() if not k.startswith("DAV1D_GRAIN")}
     pre = []
-    if is_av1(path):
+    if is_av1(path) and grain == "none":                 # the grain-free decode (as grail's structure path)
+        pre = ["-c:v", "libdav1d", "-filmgrain", "0"]
+        env["DAV1D_GRAIN_FORCE"] = "0"
+    elif is_av1(path):
         pre = ["-c:v", "libdav1d"]
         env["LD_LIBRARY_PATH"] = f"{fg}:{env['LD_LIBRARY_PATH']}" if env.get("LD_LIBRARY_PATH") else str(fg)
-        env["DAV1D_GRAIN_MODE"], env["DAV1D_GRAIN_FORCE"] = "full", "1"
+        env["DAV1D_GRAIN_MODE"], env["DAV1D_GRAIN_FORCE"] = grain, "1"
     if colour == "pq":
         conv = ("zscale=tin=smpte2084:min=2020_ncl:pin=2020:rin=limited:t=linear:npl=100,format=gbrpf32le,"
                 "zscale=p=709,tonemap=tonemap=hable:desat=0,zscale=t=709:m=709:r=full,format=rgb24")
@@ -137,22 +181,70 @@ def font(bold, size):
     return ImageFont.load_default()
 
 
-def compose(tiles, captions, path):
-    """tiles side by side, each with a caption block above: [(text, colour, bold), ...] per tile"""
+def compose(tiles, captions, path, row2=None, row2_caption=""):
+    """tiles side by side, each with a caption block above: [(text, colour, bold), ...] per tile; row2: a second row
+    of tiles under a one-line caption"""
     th, tw = tiles[0].shape[:2]
     f_b, f_r = font(True, 15), font(False, 14)
     lh = 20
     cap_h = PAD + lh * max(len(c) for c in captions) + PAD
     W = len(tiles) * tw + (len(tiles) - 1) * GAP
-    im = Image.new("RGB", (W, cap_h + th), BG)
+    r2_h = (PAD + lh + PAD + th) if row2 else 0
+    im = Image.new("RGB", (W, cap_h + th + r2_h), BG)
     d = ImageDraw.Draw(im)
     for i, (t, cap) in enumerate(zip(tiles, captions)):
         x0 = i * (tw + GAP)
         for j, (text, col, bold) in enumerate(cap):
             d.text((x0 + 2, PAD + j * lh), text, fill=col, font=f_b if bold else f_r)
         im.paste(Image.fromarray(t), (x0, cap_h))
+    if row2:
+        d.text((2, cap_h + th + PAD), row2_caption, fill=DIM, font=f_r)
+        for i, t in enumerate(row2):
+            im.paste(Image.fromarray(t), (i * (tw + GAP), cap_h + th + PAD + lh + PAD))
     im.save(path, optimize=True)
     return im.size
+
+
+def seeds_example(ex, lab, fg, grail, rescore):
+    """the same AV1 grain encode with different seeds: standard vs full-frame rendering, and the grain alone"""
+    ref = lab / ex["ref"]
+    rep = {k: score_files(grail, fg, ref, lab / v, f"{ex['id']}_{k}", rescore) for k, v in ex["versions"].items()}
+    order = next(k for k in json.loads((lab / ex["ordering"][0]).read_text()) if k.startswith(ex["ordering"][1]))
+    x, y, w, h = ex["region"]
+    cx, cy = ex["crop"][0] + x, ex["crop"][1] + y
+    z, f = ex["zoom"], ex["frame"]
+    up = lambda a: np.repeat(np.repeat(a, z, 0), z, 1)
+    tiles, grain, caps = [], [], []
+    for p in ex["panels"]:
+        path = str(lab / ex["versions"][p["version"]])
+        shown = frame_rgb(path, f, [cx, cy, w, h], "sdr", fg, p["render"]).astype(np.float32)
+        clean = frame_rgb(path, f, [cx, cy, w, h], "sdr", fg, "none").astype(np.float32)
+        g = (shown - clean).mean(2)
+        tiles.append(up(shown.astype(np.uint8)))
+        grain.append(up(np.repeat(np.clip(128 + ex["grain_gain"] * g, 0, 255).astype(np.uint8)[:, :, None], 3, 2)))
+        r = rep[p["version"]]
+        sv = r["std_decoder"]
+        third = (f"seed view {sv['seed_pct_mean']:.0f} (0 best, 100 worst)" if p["render"] == "standard" else
+                 f"GRAILS {r['score']:.1f}")
+        caps.append([(p["label"], FG, True), (p["sub"], DIM, True), (third, DIM, False)])
+    img = OUT_IMG / f"example-{ex['id']}.png"
+    size = compose(tiles, caps, img, grain, f"the grain alone (shown minus the grain-free decode), contrast x{ex['grain_gain']}")
+    rows = [{"version": k, "ssimulacra2": round(v["ssimulacra2"], 2), "grails": round(v["score"], 2), "path": v["path"],
+             "frames_scored": v["frames_scored"],
+             "seed_view": {kk: v["std_decoder"].get(kk) for kk in ("seed_frames", "seed_pct_mean", "seed_pct_p90",
+                                                                     "seed_pct_worst", "seed_bad_share",
+                                                                     "seed_degenerate")}}
+            for k, v in rep.items()]
+    any_r = next(iter(rep.values()))
+    out = {"film": ex["film"], "image": f"docs/images/{img.name}", "image_size": list(size), "frame": f,
+           "region_in_picture": ex["region"], "zoom": z, "grain_gain": ex["grain_gain"],
+           "viewer_ordering": order.split("(", 1)[1].rstrip(")"), "model_version": any_r["model_version"],
+           "tool_version": any_r["tool_version"], "mode": "full", "versions": rows}
+    print(f"{ex['film']}: {img} {size[0]}x{size[1]}, {img.stat().st_size // 1024} KB; viewer: {out['viewer_ordering']}")
+    for r in rows:
+        print(f"  {r['version']:8s} SSIMULACRA2 {r['ssimulacra2']:6.2f}  GRAILS {r['grails']:6.2f}  path {r['path']}  "
+              f"seed view {r['seed_view']}")
+    return out
 
 
 def main():
@@ -169,6 +261,11 @@ def main():
     summary = json.loads(jf.read_text()) if jf.exists() else {}
     for ex in EXAMPLES:
         if a.only and ex["id"] != a.only:
+            continue
+        if a.dump is not None and ex.get("kind") in ("seeds", "table"):
+            continue                                  # --dump is for the round examples' frame and region
+        if ex.get("kind") == "seeds":
+            summary[ex["id"]] = seeds_example(ex, lab, fg, grail, a.rescore)
             continue
         sh = lab_showings(lab, ex["round"], ex["group"])
         if a.dump is not None:
@@ -194,6 +291,14 @@ def main():
                          "g": round(res["g"], 3), "line_art_a": round(res["lineart"]["a"], 3),
                          "mbps": round(mbps, 2), "frames_scored": res["frames_scored"]})
             model, tool = res["model_version"], res["tool_version"]
+        if ex.get("kind") == "table":
+            summary[ex["id"]] = {"film": ex["film"], "window_frames": sh["end"] - sh["start"], "model_version": model,
+                                 "tool_version": tool, "mode": "full", "encodes": rows}
+            print(f"{ex['film']} (scores only)")
+            for r in rows:
+                print(f"  {r['label']:28s} viewer {r['verdict']:10s} SSIMULACRA2 {r['ssimulacra2']:6.2f}  "
+                      f"GRAILS {r['grails']:6.2f}  (g {r['g']}, a {r['line_art_a']})")
+            continue
         # the picture: the same frame and region of the source and each encode
         x, y, w, h = ex["region"]
         z = ex["zoom"]

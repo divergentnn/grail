@@ -41,7 +41,9 @@ smoothly toward the grain-aware form. `Q <= 100` always; it reads in SSIMULACRA2
 Outputs: the GRAILS score; its parts (plain SSIMULACRA2, structure, the grain term `-sum w p`, the line-art term);
 the structure path (`synth` or `coded`); `g` and `sigma_g`; every penalty and raw feature; per-frame values with
 `--json`; the flavour, the mode and the GRAILS model version (`model_version`). A separate, uncalibrated
-"standard-decoder seed view" rates the AV1 grain seeds for players that tile the grain; it never enters the score.
+"standard-decoder seed view" rates each frame's AV1 grain seed for players that tile the grain: clumps and voids in
+the grain patch it makes, and stripe-degenerate seeds
+([example](examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)); it never enters the score.
 
 ## Flavour naming rule
 

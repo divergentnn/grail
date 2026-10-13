@@ -57,17 +57,18 @@ These are the conditions the current verdicts were made under. Verdicts made oth
 > [!IMPORTANT]
 > **Review AV1 film-grain encodes only with full-frame grain.**
 >
-> An AV1 encode that uses film-grain synthesis carries no grain, only a short description of it, and the player
-> makes new grain when it plays the video. The AV1 standard has the player make one small grain patch per frame
-> and cover the picture with 32x32-pixel squares cut from that patch, at only 256 possible positions. Squares of
-> grain repeat all over the frame, and the eye catches the pattern at once. Viewers then fail an encode for the
-> decoder's pattern, not for the encode's quality, and verdicts made that way would teach GRAILS the wrong thing.
+> An AV1 encode that uses film-grain synthesis carries no grain, only a short description of it and a random seed
+> for each frame; the player makes the grain when it plays the video. Standard decoders tile one small grain patch
+> across the picture. With some seeds that patch has clumps or holes, and tiling repeats them all over the frame:
+> easy to spot, and not the encode's fault
+> ([example](docs/examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)). Viewers then fail an encode for
+> the decoder's grain, not for the encode's quality, and verdicts made that way would teach GRAILS the wrong thing.
 >
 > So judge AV1 grain encodes only with full-frame rendering:
 > [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain), which draws the grain over the whole frame (it
 > replaces the system's dav1d; its install guides cover mpv), or `grail review` once it exists, which will render
-> the grain itself. Check before you start: pause on a flat area, such as a wall or the sky, of an AV1 grain encode.
-> The grain should look like film grain, not like a repeating texture.
+> the grain itself. Check before you start, with av1-fullgrain's own test (two checksums, in its install guide), and
+> keep AV1 on software decoding in your player: hardware decoders don't use it.
 >
 > Verdicts on AV1 grain encodes reviewed with standard (tiled) grain can't be accepted. Each verdict records how the
 > grain was rendered (`grain_render` below).

@@ -229,8 +229,9 @@ fn print_text(r: &score::Report, timings: bool) {
     println!("  line art          {:8.2}  (a {:.2}, p_L {:.3})", r.lineart.term, r.lineart.a, r.lineart.p_l);
     println!("  g {:.3}  sigma_g {:.3}  frames {}  window {:?}", r.g, r.sigma_g, r.frames_scored, r.window);
     if r.std_decoder.seed_frames > 0 {
-        println!("  standard-decoder seed view (uncalibrated): mean percentile {:.1}, overlap share {:.3}",
-                 r.std_decoder.seed_pct_mean.unwrap_or(f64::NAN), r.std_decoder.seed_overlap_share.unwrap_or(f64::NAN));
+        println!("  standard-decoder seed view (uncalibrated): seed rating {:.1} (0 best, 100 worst), {:.0} % of frames \
+                  in the worst tenth", r.std_decoder.seed_pct_mean.unwrap_or(f64::NAN),
+                 100.0 * r.std_decoder.seed_bad_share.unwrap_or(f64::NAN));
     }
     if timings {
         for (k, v) in &r.timings {

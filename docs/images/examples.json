@@ -102,5 +102,194 @@
     "frames_scored": 79
    }
   ]
+ },
+ "grain-hunt": {
+  "film": "The Hunt (2012)",
+  "image": "docs/images/example-grain-hunt.png",
+  "image_size": [
+   880,
+   462
+  ],
+  "frame_in_window": 75,
+  "region_in_window": [
+   640,
+   140,
+   96,
+   130
+  ],
+  "zoom": 3,
+  "window_frames": 79,
+  "model_version": "0.2.1",
+  "tool_version": "0.1.0-beta.1",
+  "mode": "full",
+  "encodes": [
+   {
+    "label": "A: grain smoothed away",
+    "what": "AV1, no grain synthesis",
+    "verdict": "fail",
+    "ssimulacra2": 82.43,
+    "grails": 60.97,
+    "structure": 100.0,
+    "grain_term": -47.33,
+    "lineart_term": 0.0,
+    "path": "coded",
+    "g": 0.721,
+    "line_art_a": 0.0,
+    "mbps": 0.65,
+    "frames_scored": 79
+   },
+   {
+    "label": "B: denoise + AV1 grain",
+    "what": "denoised, AV1 film grain",
+    "verdict": "pass",
+    "ssimulacra2": 78.6,
+    "grails": 91.64,
+    "structure": 97.88,
+    "grain_term": -1.2,
+    "lineart_term": 0.0,
+    "path": "synth",
+    "g": 0.721,
+    "line_art_a": 0.0,
+    "mbps": 0.56,
+    "frames_scored": 79
+   }
+  ]
+ },
+ "seeds": {
+  "film": "Black Swan (2010)",
+  "image": "docs/images/example-seeds.png",
+  "image_size": [
+   880,
+   584
+  ],
+  "frame": 58,
+  "region_in_picture": [
+   816,
+   64,
+   144,
+   120
+  ],
+  "zoom": 2,
+  "grain_gain": 6,
+  "viewer_ordering": "best > v1-best > default > worst",
+  "model_version": "0.2.1",
+  "tool_version": "0.1.0-beta.1",
+  "mode": "full",
+  "versions": [
+   {
+    "version": "worst",
+    "ssimulacra2": 0.9,
+    "grails": 98.65,
+    "path": "synth",
+    "frames_scored": 240,
+    "seed_view": {
+     "seed_frames": 240,
+     "seed_pct_mean": 77.0,
+     "seed_pct_p90": 96.73,
+     "seed_pct_worst": 98.76,
+     "seed_bad_share": 0.321,
+     "seed_degenerate": 0
+    }
+   },
+   {
+    "version": "best",
+    "ssimulacra2": 0.99,
+    "grails": 98.64,
+    "path": "synth",
+    "frames_scored": 240,
+    "seed_view": {
+     "seed_frames": 240,
+     "seed_pct_mean": 27.22,
+     "seed_pct_p90": 68.7,
+     "seed_pct_worst": 68.7,
+     "seed_bad_share": 0.0,
+     "seed_degenerate": 0
+    }
+   },
+   {
+    "version": "default",
+    "ssimulacra2": 0.9,
+    "grails": 98.67,
+    "path": "synth",
+    "frames_scored": 240,
+    "seed_view": {
+     "seed_frames": 240,
+     "seed_pct_mean": 51.27,
+     "seed_pct_p90": 92.77,
+     "seed_pct_worst": 99.93,
+     "seed_bad_share": 0.121,
+     "seed_degenerate": 0
+    }
+   }
+  ]
+ },
+ "clean": {
+  "film": "1917 (2019)",
+  "window_frames": 79,
+  "model_version": "0.2.1",
+  "tool_version": "0.1.0-beta.1",
+  "mode": "full",
+  "encodes": [
+   {
+    "label": "x264, CRF 13",
+    "what": "x264 CRF 13",
+    "verdict": "pass",
+    "ssimulacra2": 79.67,
+    "grails": 79.67,
+    "structure": 86.91,
+    "grain_term": -4.63,
+    "lineart_term": 0.0,
+    "path": "coded",
+    "g": 0.0,
+    "line_art_a": 0.0,
+    "mbps": 23.47,
+    "frames_scored": 79
+   },
+   {
+    "label": "x265, CRF 17",
+    "what": "x265 CRF 17",
+    "verdict": "fail",
+    "ssimulacra2": 73.05,
+    "grails": 73.05,
+    "structure": 81.6,
+    "grain_term": -4.0,
+    "lineart_term": 0.0,
+    "path": "coded",
+    "g": 0.0,
+    "line_art_a": 0.0,
+    "mbps": 11.98,
+    "frames_scored": 79
+   },
+   {
+    "label": "SVT-AV1, CRF 10",
+    "what": "SVT-AV1 CRF 10",
+    "verdict": "fail",
+    "ssimulacra2": 72.94,
+    "grails": 72.94,
+    "structure": 82.37,
+    "grain_term": -12.34,
+    "lineart_term": 0.0,
+    "path": "coded",
+    "g": 0.0,
+    "line_art_a": 0.0,
+    "mbps": 15.67,
+    "frames_scored": 79
+   },
+   {
+    "label": "SVT-AV1, CRF 17",
+    "what": "SVT-AV1 CRF 17",
+    "verdict": "fail",
+    "ssimulacra2": 63.95,
+    "grails": 63.95,
+    "structure": 74.7,
+    "grain_term": -14.18,
+    "lineart_term": 0.0,
+    "path": "coded",
+    "g": 0.0,
+    "line_art_a": 0.0,
+    "mbps": 8.25,
+    "frames_scored": 79
+   }
+  ]
  }
 }

@@ -59,6 +59,9 @@ fitted on.)
 | A: SVT-AV1 4.2.0, preset 6 | fail | 72.6 | 61.8 | 1.51 Mb/s |
 | B: SVT-AV1 4.2.0, preset 2 | pass | 77.9 | 77.9 | 1.51 Mb/s |
 
+More examples, with another grainy film, AV1 grain seeds in standard players and clean footage:
+**[docs/examples.md](docs/examples.md)**.
+
 ## How it works
 
 Grain is random, so comparing it pixel by pixel says little: two equally good copies of a grainy film disagree almost
@@ -77,10 +80,12 @@ everywhere. GRAIL compares the picture and the grain separately.
 How much the grain comparison counts depends on how grainy the source is; on a clean source, GRAILS is plain
 SSIMULACRA2. AV1 film-grain synthesis makes the same split when it encodes: it removes the grain, encodes the clean
 picture and stores a short description of the grain, from which the player makes new grain. That is why GRAIL can
-judge synthetic grain fairly: it compares grain with grain. To see that grain as a viewer should, GRAIL renders it
-with [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain), a dav1d build that draws the grain over the whole
-frame. The AV1 standard has players cover the picture with pieces of one small grain patch instead, and the
-repeating pattern shows.
+judge synthetic grain fairly: it compares grain with grain. It renders that grain with
+[av1-fullgrain](https://github.com/divergentnn/av1-fullgrain), a dav1d build that draws the grain over the whole frame.
+Standard players tile one small grain patch per frame across the picture instead; with an unlucky seed that patch has
+clumps or holes, and tiling repeats them all over the frame ([example](docs/examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)).
+That is the player's doing, not the encode's, so it doesn't lower GRAILS; a separate seed view in the report rates the
+seeds for standard players.
 
 ## Why use it
 
