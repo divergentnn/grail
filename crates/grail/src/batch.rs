@@ -95,8 +95,9 @@ pub fn run(list: &Path, out: Option<&Path>, base: &Opts, full: bool, model: &Mod
                     v["label"] = json!(label);
                     v
                 } else {
-                    json!({"id": id, "label": label, "flavour": r.flavour, "mode": r.mode, "grail_version": r.grail_version,
-                           "grails": r.score, "ssimulacra2": r.ssimulacra2, "structure": r.structure, "grain": r.grain,
+                    json!({"id": id, "label": label, "flavour": r.flavour, "mode": r.mode,
+                           "model_version": r.model_version, "grails": r.score, "ssimulacra2": r.ssimulacra2,
+                           "structure": r.structure, "grain": r.grain,
                            "lineart": r.lineart.term, "a": r.lineart.a, "path": r.path, "g": r.g, "sigma_g": r.sigma_g,
                            "frames": r.frames, "frames_scored": r.frames_scored, "window": r.window,
                            "ref": o.reference, "dist": o.dist, "seconds": t0.elapsed().as_secs_f64()})

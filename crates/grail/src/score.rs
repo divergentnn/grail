@@ -82,7 +82,8 @@ pub struct LineArtOut {
 pub struct Report {
     pub flavour: String,
     pub mode: String,
-    pub grail_version: String,
+    /// the GRAILS model (weights.json "version"); separate from the tool's version
+    pub model_version: String,
     pub tool_version: String,
     pub score: f64,
     pub ssimulacra2: f64,
@@ -606,7 +607,7 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     Ok(Report {
         flavour: FLAVOUR.into(),
         mode: if o.fast { if o.denoise_candidate { "fast+denoise-candidate".into() } else { "fast".into() } } else { "full".into() },
-        grail_version: model.version.clone(),
+        model_version: model.version.clone(),
         tool_version: TOOL_VERSION.into(),
         score: q,
         ssimulacra2: s0,

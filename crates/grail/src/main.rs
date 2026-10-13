@@ -12,7 +12,9 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "grail", version, about = "GRAILS: grain- and line-art-aware video quality (SSIMULACRA2 scale)")]
+#[command(name = "grail", version,
+          about = "GRAIL (Grain- and Ringing-Aware Image Likeness): video quality that understands film grain and 2D \
+                   line art. Its score, GRAILS, is on the SSIMULACRA2 scale")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -219,7 +221,8 @@ fn run() -> Result<()> {
 }
 
 fn print_text(r: &score::Report, timings: bool) {
-    println!("{} {:.2}  ({} mode, GRAIL model {}, grail {})", r.flavour, r.score, r.mode, r.grail_version, r.tool_version);
+    println!("{} {:.2}  ({} mode, {} model {}, grail {})", r.flavour, r.score, r.mode, r.flavour, r.model_version,
+             r.tool_version);
     println!("  SSIMULACRA2       {:8.2}", r.ssimulacra2);
     println!("  structure         {:8.2}  (path {})", r.structure, r.path);
     println!("  grain             {:8.2}", r.grain);

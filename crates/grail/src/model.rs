@@ -1,5 +1,5 @@
-//! The GRAILS v2.1 model on the CPU: penalties from the raw features, the two structure paths, the composite, the
-//! line-art term (evaluate.py: penalties, structure, grain_capture, model_score, lineart_*).
+//! The GRAILS model (0.2.1 = the lab's v2.1) on the CPU: penalties from the raw features, the two structure paths,
+//! the composite, the line-art term (evaluate.py: penalties, structure, grain_capture, model_score, lineart_*).
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;

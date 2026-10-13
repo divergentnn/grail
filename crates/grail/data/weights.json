@@ -1,6 +1,6 @@
 {
- "note": "grainscore v2.1 (fit21.py model, 2026-10-12): Ds_full features (feat_full*.jsonl); structure = S_D' for AV1 synthetic-grain candidates, S_D mapped onto its scale otherwise (struct); no floor term; grain branch refit on every showing; lineart = anime path refit with the branch frozen",
- "version": "2.1",
+ "note": "GRAILS model 0.2.1 = the lab's grainscore v2.1 (fit21.py model, 2026-10-12): Ds_full features (feat_full*.jsonl); structure = S_D' for AV1 synthetic-grain candidates, S_D mapped onto its scale otherwise (struct); no floor term; grain branch refit on every showing; lineart = anime path refit with the branch frozen",
+ "version": "0.2.1",
  "base": "ssimu2",
  "terms": [
   "under",
