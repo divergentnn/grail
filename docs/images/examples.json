@@ -55,7 +55,30 @@
      "grails": "right"
     }
    }
-  ]
+  ],
+  "animation": {
+   "file": "docs/images/example-grain.avif",
+   "frames": 48,
+   "fps": "24000/1001",
+   "crf": 4,
+   "bytes": 2645775,
+   "ssimulacra2_min": 95.71,
+   "ssimulacra2_mean": 96.63,
+   "tried": [
+    [
+     2,
+     4608450,
+     null
+    ],
+    [
+     4,
+     2645775,
+     95.71,
+     0
+    ]
+   ],
+   "first_frame_in_window": 6
+  }
  },
  "lineart": {
   "film": "Your Name (2016)",
@@ -112,7 +135,25 @@
      "grails": "right"
     }
    }
-  ]
+  ],
+  "animation": {
+   "file": "docs/images/example-lineart.avif",
+   "frames": 54,
+   "fps": "24000/1001",
+   "crf": 2,
+   "bytes": 1241651,
+   "ssimulacra2_min": 97.0,
+   "ssimulacra2_mean": 97.5,
+   "tried": [
+    [
+     2,
+     1241651,
+     97.0,
+     34
+    ]
+   ],
+   "first_frame_in_window": 6
+  }
  },
  "grain-hunt": {
   "film": "The Hunt (2012)",
@@ -238,7 +279,35 @@
      "seed_degenerate": 0
     }
    }
-  ]
+  ],
+  "animation": {
+   "file": "docs/images/example-seeds.avif",
+   "frames": 36,
+   "fps": "24000/1001",
+   "crf": 6,
+   "bytes": 2277142,
+   "ssimulacra2_min": 92.25,
+   "ssimulacra2_mean": 92.97,
+   "tried": [
+    [
+     2,
+     4460334,
+     null
+    ],
+    [
+     4,
+     3009833,
+     null
+    ],
+    [
+     6,
+     2277142,
+     92.25,
+     1
+    ]
+   ],
+   "first_frame": 40
+  }
  },
  "clean": {
   "film": "1917 (2019)",

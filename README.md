@@ -36,9 +36,14 @@ one the viewer passed), and a red ✗ its score for the encode it wrongly prefer
 same settings and CRF. Encode A, a plain encode, smoothed the grain away. Encode B removed the grain before encoding
 and lets the player re-create it with AV1 film-grain synthesis. The viewer failed A and passed B, which is also a
 quarter smaller. Plain SSIMULACRA2 prefers A, because a smooth picture is closer to the source pixel for pixel than
-new random grain; GRAILS agrees with the viewer. (This scene is one of those GRAILS was fitted on.)
+new random grain; GRAILS agrees with the viewer. In motion (the animation under the picture), the source's grain and
+B's are new in every frame, while A's face stays waxy smooth. (This scene is one of those GRAILS was fitted on.)
 
 ![The Lighthouse (2019), 2x crops of the same frame: the source, encode A with the grain smoothed away (viewer: fail, SSIMULACRA2 81.2 marked wrong with a red cross, GRAILS 58.0), encode B denoised with AV1 film grain (viewer: pass, SSIMULACRA2 75.7, GRAILS 93.3 marked right with a green check)](docs/images/example-grain.png)
+
+![The Lighthouse (2019), animated: the same three crops over 2 seconds (frames 6-53 of the clip, enlarged 2x). The grain of the source and of B is new in every frame; A's face stays smooth](docs/images/example-grain.avif)
+
+*Animated AVIF; if it doesn't play, see the still above.*
 
 | The Lighthouse (2019) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
@@ -66,10 +71,15 @@ are surrounded by a faint halo and look smeared; B keeps them clean. The viewer 
 ranks them the same way (both metrics get a ✓), but its 72.6 for A doesn't tell you anything is wrong: on the other
 films, encodes with an SSIMULACRA2 of 72 to 74 passed about half the time in the blind tests (15 of 29 showings).
 GRAILS's line-art check measures the halos next to the lines and takes 10.9 points off A; B has none, so its GRAILS
-is its SSIMULACRA2. The crop is from the frames where GRAILS measured A's strongest ringing. (This scene was not
-among those GRAILS was fitted on.)
+is its SSIMULACRA2. The crop is from the frames where GRAILS measured A's strongest ringing. In motion, A's halo
+flares up every few frames, with each new drawing, while B stays steady. (This scene was not among those GRAILS was
+fitted on.)
 
 ![Your Name (2016), 3x crops of the same frame: the source, encode A at SVT-AV1 preset 6 (viewer: fail, SSIMULACRA2 72.6, GRAILS 61.8), encode B at SVT-AV1 preset 2 (viewer: pass, SSIMULACRA2 77.9 and GRAILS 77.9, both marked right with green checks)](docs/images/example-lineart.png)
+
+![Your Name (2016), animated: the same three crops over 2.3 seconds (frames 6-59, enlarged 3x). The halo around A's highlight flares up every few frames, with each new drawing; B stays steady](docs/images/example-lineart.avif)
+
+*Animated AVIF; if it doesn't play, see the still above.*
 
 | Your Name (2016) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
