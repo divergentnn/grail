@@ -58,10 +58,10 @@ These are the conditions the current verdicts were made under. Verdicts made oth
 > [!IMPORTANT]
 > **Review AV1 film-grain encodes only with full-frame grain.**
 >
-> An AV1 encode that uses film-grain synthesis carries no grain, only a short description of it and a random seed
-> for each frame; the player makes the grain when it plays the video. Standard decoders tile one small grain patch
-> across the picture. With some seeds that patch has clumps or holes, and tiling repeats them all over the frame:
-> easy to spot, and not the encode's fault
+> In an AV1 encode that uses film-grain synthesis, the player makes the grain when it plays the video, from a short
+> description of it and a random seed for each frame (some of the grain may also be coded in the picture itself).
+> Standard decoders tile one small grain patch across the picture. With some seeds that patch has clumps or holes,
+> and tiling repeats them all over the frame: easy to spot, and not the encode's fault
 > ([example](docs/examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)). Viewers then fail an encode for
 > the decoder's grain, not for the encode's quality, and verdicts made that way would teach GRAILS the wrong thing.
 >

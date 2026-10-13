@@ -3,10 +3,10 @@
 Scenes from the blind tests GRAILS was calibrated on. Each image shows the same frame and spot of every version,
 enlarged without smoothing so the grain stays visible. Unless a section says otherwise, the scores are this tool's
 (full mode, GRAILS model 0.2.1) for exactly the frames and window the viewer judged, a 3.3-second clip, and "viewer"
-is the verdict the viewer gave each encode, blind, against the source. For each metric, a green ✓ marks its score
-for the encode it rightly prefers (the one the viewer passed), and a red ✗ its score for the encode it wrongly
-prefers. `tools/make_examples.py` regenerates the images and the numbers (`docs/images/examples.json`). Back to the
-[README](../README.md).
+is the verdict the viewer gave each encode, blind, against the source; bitrates are the video stream's. For each
+metric, a green ✓ marks its score for the encode it rightly prefers (the one the viewer passed), and a red ✗ its
+score for the encode it wrongly prefers. `tools/make_examples.py` regenerates the images and the numbers
+(`docs/images/examples.json`). Back to the [README](../README.md).
 
 - [Film grain: The Lighthouse (2019)](#film-grain-the-lighthouse-2019)
 - [Heavy grain: Black Swan (2010)](#heavy-grain-black-swan-2010)
@@ -27,7 +27,7 @@ because a smooth picture is closer to the source pixel for pixel than new random
 
 | The Lighthouse (2019) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: AV1, no grain synthesis (grain smoothed away) | fail | 81.2 | 58.0 | 1.21 Mb/s |
+| A: AV1, no grain synthesis (grain smoothed away) | fail | 81.2 | 58.0 | 1.20 Mb/s |
 | B: denoised, AV1 film-grain synthesis | pass | 75.7 | 93.3 | 0.90 Mb/s |
 
 ## Heavy grain: Black Swan (2010)
@@ -44,13 +44,13 @@ fail. (This scene is one of those GRAILS was fitted on.)
 
 | Black Swan (2010) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: AV1, synthetic grain at half strength | fail | 10.2 | 58.7 | 2.47 Mb/s |
-| B: AV1, synthetic grain at full strength | pass | 0.1 | 87.6 | 1.78 Mb/s |
+| A: AV1, synthetic grain at half strength | fail | 10.2 | 58.7 | 2.46 Mb/s |
+| B: AV1, synthetic grain at full strength | pass | 0.1 | 87.6 | 1.77 Mb/s |
 
 ## Film grain: The Hunt (2012)
 
 The same comparison as The Lighthouse, on another film. Look at the cheek and the forehead: A's skin is smooth and
-waxy, B's has the source's texture. Both encodes are AV1 at the same settings and CRF; B is 14 % smaller. The viewer
+waxy, B's has the source's texture. Both encodes are AV1 at the same settings and CRF; B is also smaller. The viewer
 failed A, noting missing grain and skin texture on a face in another shot of the clip, and passed B. Plain
 SSIMULACRA2 again prefers A, by about 4 points; GRAILS puts B 31 points ahead. (This scene is one of those GRAILS
 was fitted on.)
@@ -59,7 +59,7 @@ was fitted on.)
 
 | The Hunt (2012) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: AV1, no grain synthesis (grain smoothed away) | fail | 82.4 | 61.0 | 0.65 Mb/s |
+| A: AV1, no grain synthesis (grain smoothed away) | fail | 82.4 | 61.0 | 0.64 Mb/s |
 | B: denoised, AV1 film-grain synthesis | pass | 78.6 | 91.6 | 0.56 Mb/s |
 
 ## Line art: Your Name (2016)
@@ -77,16 +77,16 @@ fitted on.)
 
 | Your Name (2016) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: SVT-AV1 4.2.0, preset 6 | fail | 72.6 | 61.8 | 1.51 Mb/s |
+| A: SVT-AV1 4.2.0, preset 6 | fail | 72.6 | 61.8 | 1.50 Mb/s |
 | B: SVT-AV1 4.2.0, preset 2 | pass | 77.9 | 77.9 | 1.51 Mb/s |
 
 ## AV1 grain seeds in standard players: Black Swan (2010)
 
-An AV1 encode with film-grain synthesis carries no grain, only a description of it and a random seed for each frame;
-the player makes the grain. Standard players (dav1d, ffmpeg, hardware decoders) do it as the AV1 standard prescribes:
-they make one small grain patch per frame from the seed and tile it across the picture. The tiling itself is fine. The
-trouble is unlucky seeds: with some seeds the patch has clumps or holes, and tiling repeats them all over the frame,
-where the eye catches them at once.
+An AV1 encode with film-grain synthesis stores a description of the grain and a random seed for each frame, and the
+player makes the grain; usually the coded picture carries little grain of its own, as here. Standard players (dav1d,
+ffmpeg, hardware decoders) do it as the AV1 standard prescribes: they make one small grain patch per frame from the
+seed and tile it across the picture. The tiling itself is fine. The trouble is unlucky seeds: with some seeds the
+patch has clumps or holes, and tiling repeats them all over the frame, where the eye catches them at once.
 
 All three panels are one encode of a 10-second scene with very heavy grain (frame 58, enlarged 2x). A and B differ only
 in their seeds, rewritten in the stream without re-encoding: A has the worst-rated seed for each frame, B the
@@ -100,10 +100,14 @@ seed.
 In a blind test of these versions as a standard player shows them, the viewer ranked the best-rated seeds first and the
 worst-rated last, with an earlier seed pick second and the encoder's own seeds third.
 
-GRAILS scores the grain the encode describes, drawn over the whole frame, so the seeds don't change the score. Its
-separate **standard-decoder seed view** rates each frame's seed for the clumps and holes of its grain patch (and flags
-seeds that make striped patches), from 0 (best) to 100 (worst). It is uncalibrated and never part of the score; on the
-blind seed tests, with the seed table in this release (model 0.2.1) it put 14 of 15 judged pairs of versions in the viewer's order. This release's table also counts how much a seed's patch repeats; the next release (0.2.2) drops that, since the viewer minds clumps and holes, not repetition, and its table orders 12 of the 15 pairs correctly.
+GRAILS scores the grain the encode describes, drawn over the whole frame, and keeps the standard-decoder seed rating
+out of the score. Full-frame grain is random too, so the score can still move very slightly with the seeds: 98.65,
+98.64 and 98.67 here. Its separate **standard-decoder seed view** rates each frame's seed for the clumps and holes
+of its grain patch (and flags seeds that make striped patches), from 0 (best) to 100 (worst). It is uncalibrated and
+never part of the score; on the blind seed tests, with the seed table in this release (model 0.2.1) it put 14 of 15
+judged pairs of versions in the viewer's order. This release's table also counts how much a seed's patch repeats;
+the next release (0.2.2) drops that, since the viewer minds clumps and holes, not repetition, and its table orders
+12 of the 15 pairs correctly.
 
 | Black Swan (2010), whole scene, 240 frames | SSIMULACRA2 | GRAILS | seed view (mean) | frames with a seed in the worst tenth |
 |---|---|---|---|---|

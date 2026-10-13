@@ -144,6 +144,15 @@ def score_files(grail, fg, ref, dist, key, rescore):
     return res
 
 
+def video_mbps(path, fps):
+    """the video stream's bitrate: its packets' bytes over its frame count / fps (container overhead and other tracks
+    left out)"""
+    o = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=size", "-of",
+                        "csv=p=0", str(path)], check=True, capture_output=True, text=True).stdout.split()
+    sizes = [int(x.strip(",")) for x in o if x.strip(",").isdigit()]
+    return sum(sizes) * 8 / (len(sizes) / fps) / 1e6
+
+
 def is_av1(path):
     o = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name",
                         "-of", "csv=p=0", path], check=True, capture_output=True, text=True).stdout
@@ -201,12 +210,13 @@ RANK = {"pass": 2, "borderline": 1, "fail": 0}
 
 def marks(rows):
     """for a pair the viewer judged differently: per metric, a green check on the score of the encode it rightly
-    prefers, or a red cross on the score of the encode it wrongly prefers; nothing for a tie or a single encode"""
+    prefers, or a red cross on the score of the encode it wrongly prefers; nothing for a tie, a single encode or a
+    missing verdict. rows: verdict and the UNROUNDED scores"""
     out = [{} for _ in rows]
-    if len(rows) != 2:
+    if len(rows) != 2 or any(r["verdict"] not in RANK for r in rows):
         return out
-    good, bad = sorted(range(2), key=lambda i: -RANK.get(rows[i]["verdict"], -1))
-    if RANK.get(rows[good]["verdict"], -1) <= RANK.get(rows[bad]["verdict"], -1):
+    good, bad = sorted(range(2), key=lambda i: -RANK[rows[i]["verdict"]])
+    if RANK[rows[good]["verdict"]] == RANK[rows[bad]["verdict"]]:
         return out
     for m in ("ssimulacra2", "grails"):
         if rows[good][m] > rows[bad][m]:
@@ -318,11 +328,12 @@ def main():
                                           fg)).save(CACHE / f"{ex['id']}_f{a.dump}_{p['cand']}.png")
             print("dumped", ex["id"], "frame", a.dump, "->", CACHE)
             continue
-        rows = []
+        rows, raw = [], []
         for p in ex["panels"]:
             res = score(grail, fg, sh, p["cand"], a.rescore)
             c = sh["cands"][p["cand"]]
-            mbps = Path(c["path"]).stat().st_size * 8 / ((sh["end"] + c["lead"]) / sh["fps"]) / 1e6
+            mbps = video_mbps(c["path"], sh["fps"])
+            raw.append({"verdict": c["verdict"], "ssimulacra2": res["ssimulacra2"], "grails": res["score"]})
             rows.append({"label": p["label"], "what": p["what"], "verdict": c["verdict"],
                          "ssimulacra2": round(res["ssimulacra2"], 2), "grails": round(res["score"], 2),
                          "structure": round(res["structure"], 2), "grain_term": round(res["grain"], 2),
@@ -349,7 +360,7 @@ def main():
 
         tiles = [tile(sh["ref"])] + [tile(sh["cands"][p["cand"]]) for p in ex["panels"]]
         caps = [[("Source", FG, True), (ex["film"], DIM, True), (f"frame {ex['frame']}, enlarged {z}x", DIM, False)]]
-        mk = marks(rows)
+        mk = marks(raw)
         for r, m in zip(rows, mk):
             score_line = [(f"SSIMULACRA2 {r['ssimulacra2']:.1f}", DIM, False)]
             if "ssimulacra2" in m:

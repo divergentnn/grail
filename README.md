@@ -26,11 +26,11 @@ source's.
 
 ## Three examples
 
-Three scenes from the blind tests. Each image shows the same frame and spot of the source and of two encodes, enlarged
-without smoothing so the grain stays visible. The scores are this tool's (full mode), for the whole 3.3-second clip
-the viewer judged; "viewer" is the verdict the viewer gave each encode, blind, against the source. For each metric,
-a green ✓ marks its score for the encode it rightly prefers (the one the viewer passed), and a red ✗ its score for
-the encode it wrongly prefers.
+Three scenes from the blind tests. Each image shows the same frame and spot of the source and of two encodes,
+enlarged without smoothing so the grain stays visible. The scores are this tool's (full mode), for the whole
+3.3-second clip the viewer judged; "viewer" is the verdict the viewer gave each encode, blind, against the source;
+bitrates are the video stream's. For each metric, a green ✓ marks its score for the encode it rightly prefers (the
+one the viewer passed), and a red ✗ its score for the encode it wrongly prefers.
 
 **Film grain: The Lighthouse (2019).** Look at the skin of the forehead and cheeks. Both encodes are AV1 with the
 same settings and CRF. Encode A, a plain encode, smoothed the grain away. Encode B removed the grain before encoding
@@ -42,7 +42,7 @@ new random grain; GRAILS agrees with the viewer. (This scene is one of those GRA
 
 | The Lighthouse (2019) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: AV1, no grain synthesis (grain smoothed away) | fail | 81.2 | 58.0 | 1.21 Mb/s |
+| A: AV1, no grain synthesis (grain smoothed away) | fail | 81.2 | 58.0 | 1.20 Mb/s |
 | B: denoised, AV1 film-grain synthesis | pass | 75.7 | 93.3 | 0.90 Mb/s |
 
 **Heavy grain: Black Swan (2010).** Look at the skin of the face. Both encodes are AV1 at CRF 33 with film-grain
@@ -57,8 +57,8 @@ SSIMULACRA2 gives its highest score to a fail. (This scene is one of those GRAIL
 
 | Black Swan (2010) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: AV1, synthetic grain at half strength | fail | 10.2 | 58.7 | 2.47 Mb/s |
-| B: AV1, synthetic grain at full strength | pass | 0.1 | 87.6 | 1.78 Mb/s |
+| A: AV1, synthetic grain at half strength | fail | 10.2 | 58.7 | 2.46 Mb/s |
+| B: AV1, synthetic grain at full strength | pass | 0.1 | 87.6 | 1.77 Mb/s |
 
 **Line art: Your Name (2016)** (4K HDR, tone-mapped for this picture). Both encodes are SVT-AV1 4.2.0 at the same
 file size: A at preset 6, B at the much slower preset 2. Look at the tear highlight and the line under it: in A they
@@ -73,7 +73,7 @@ among those GRAILS was fitted on.)
 
 | Your Name (2016) | viewer | SSIMULACRA2 | GRAILS | bitrate |
 |---|---|---|---|---|
-| A: SVT-AV1 4.2.0, preset 6 | fail | 72.6 | 61.8 | 1.51 Mb/s |
+| A: SVT-AV1 4.2.0, preset 6 | fail | 72.6 | 61.8 | 1.50 Mb/s |
 | B: SVT-AV1 4.2.0, preset 2 | pass | 77.9 | 77.9 | 1.51 Mb/s |
 
 More examples, with another grainy film, AV1 grain seeds in standard players and clean footage:
@@ -94,22 +94,27 @@ everywhere. GRAIL compares the picture and the grain separately.
 - **Check line art.** On 2D animation, a separate check measures ringing that the encode adds next to the source's
   ink lines.
 
-How much the grain comparison counts depends on how grainy the source is; on a clean source, GRAILS is plain
-SSIMULACRA2. AV1 film-grain synthesis makes the same split when it encodes: it removes the grain, encodes the clean
-picture and stores a short description of the grain, from which the player makes new grain. That is why GRAIL can
-judge synthetic grain fairly: it compares grain with grain. It renders that grain with
-[av1-fullgrain](https://github.com/divergentnn/av1-fullgrain), a dav1d build that draws the grain over the whole frame.
-Standard players tile one small grain patch per frame across the picture instead; with an unlucky seed that patch has
-clumps or holes, and tiling repeats them all over the frame ([example](docs/examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)).
-That is the player's doing, not the encode's, so it doesn't lower GRAILS; a separate seed view in the report rates the
-seeds for standard players.
+How much the grain comparison counts depends on how grainy the source is; on a source with no grain (or only a
+little, below GRAIL's threshold) and no line art, GRAILS is plain SSIMULACRA2. AV1 film-grain synthesis makes the
+same split when it encodes: it removes the grain, encodes the clean picture and stores a short description of the
+grain, from which the player makes new grain. That is why GRAIL can judge synthetic grain fairly: it compares grain
+with grain. Not every such encode has a clean picture underneath, though: when the encoder doesn't remove the grain
+first, much of it stays coded in the picture, under the synthetic grain. GRAIL notices this and then compares that
+encode the way it compares any other, through the denoiser. GRAIL renders the synthetic grain with
+[av1-fullgrain](https://github.com/divergentnn/av1-fullgrain), a dav1d build that draws the grain over the whole
+frame. Standard players tile one small grain patch per frame across the picture instead; with an unlucky seed that
+patch has clumps or holes, and tiling repeats them all over the frame
+([example](docs/examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)). That is the player's doing, not
+the encode's, and GRAILS, which scores the full-frame rendering, leaves it out; a separate seed view in the report
+rates the seeds for standard players.
 
 ## Why use it
 
-- **Grainy films.** We fitted GRAILS on 574 blind comparisons by a viewer across 13 films. Then we checked how often
-  the higher score picks the encode the viewer preferred, on films the model hadn't seen: GRAILS gets it right
-  **68 %** of the time, plain SSIMULACRA2 **55 %** (50 % is a coin flip). The other common metrics do no better than
-  SSIMULACRA2.
+- **Grainy films.** We fitted GRAILS on 574 blind verdicts (pass, borderline or fail) by a viewer across 13 films.
+  Then we checked it on films the model hadn't seen: take two encodes of different scenes that the viewer rated
+  differently; how often does the better-rated one get the higher score? GRAILS: **68 %** of the time, plain
+  SSIMULACRA2: **55 %** (50 % is a coin flip). That is what a quality target needs: the same score meaning about the
+  same quality from scene to scene. The other common metrics do no better than SSIMULACRA2.
 - **AV1 film grain synthesis.** GRAILS renders AV1's synthetic grain the way it should look, full frame
   ([av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)), and compares it fairly with the source's real grain.
   So you can tell whether your grain settings actually work.
@@ -149,9 +154,10 @@ scoring and JSON output are in **[docs/usage.md](docs/usage.md)**.
 
 - **Up to 100, higher is closer to the source**, on the same scale as SSIMULACRA2. Like SSIMULACRA2, it has no
   lower bound: badly damaged encodes can score below 0.
-- **Compare encodes of the same scene.** That's where GRAILS is strongest: it picks the encode the viewer preferred
-  about 4 times in 5. There is no universal pass mark yet, because where a viewer starts to see a problem still
-  varies from scene to scene and film to film.
+- **Compare encodes of the same scene.** That's where GRAILS is strongest: of two encodes of one scene, judged in
+  the same test, that the viewer rated differently, the better-rated one gets the higher GRAILS about 4 times in 5
+  (81 %; plain SSIMULACRA2 76 %, on films the model hadn't seen). There is no universal pass mark yet, because where
+  a viewer starts to see a problem still varies from scene to scene and film to film.
 - **Full or fast mode?** Fast mode scores a sample of the frames and is about twice as fast, with the same accuracy
   overall. On very heavy, coarse grain, use full mode (or `--fast --denoise-candidate`).
 - The output also shows plain SSIMULACRA2. When the two differ a lot, grain (or line art) is the reason.
@@ -178,24 +184,28 @@ On a scene of this length, GRAILS's full mode is about 1.6x (1080p) to 2.3x (4K)
 mode keeps up with FFVship at 1080p. FFVship's lead grows on long files, where its start-up cost is spread out (not
 measured here).
 
-Why GRAILS costs more: FFVship computes the metric alone, while in GRAILS SSIMULACRA2 itself takes only about 2 % of
-the time. GRAILS first has to separate the grain from the picture, in every frame of both videos, with a
-motion-compensated denoiser that searches the neighbouring frames for matching blocks: far more work than the metric
-itself. And the denoiser has to be good. A weak one leaves grain in the "clean" picture, so the grain gets punished
-again, or smears real detail, so real damage is missed; GRAILS's scores depend on it. That is why GRAILS needs a GPU:
-the same work on a CPU would run at roughly 2 frames/s at 1080p.
+Why GRAILS costs more: FFVship computes the metric alone. GRAILS first has to separate the grain from the picture,
+in every frame of both videos, with a motion-compensated denoiser that searches the neighbouring frames for matching
+blocks: far more work than the metric itself. And the denoiser has to be good. A weak one leaves grain in the
+"clean" picture, so the grain gets punished again, or smears real detail, so real damage is missed; GRAILS's scores
+depend on it. That is why GRAILS needs a GPU: the same work on a CPU would run at roughly 2 frames/s at 1080p.
 
 Where the time goes on the RTX 3090 (1080p, full mode): decoding the source, about a third; denoising, together with
-decoding the encode, 43 %; the grain measurements, 19 %; the line-art check and SSIMULACRA2, about 2 % each
-(SSIMULACRA2 runs alongside, on helper threads).
+decoding the encode, 43 %; the grain measurements, 19 %; the line-art check, 2 %. SSIMULACRA2 runs alongside on
+helper threads; the pipeline waits for it under 2 % of the time (its own GPU time isn't measured separately).
 
 On a Mac that is also encoding, run grail at low priority (`taskpolicy -c utility grail ...`): the encoder keeps
 most of its speed.
 
 ## Good to know
 
-- **Beta.** GRAILS is fitted on one viewer's blind judgments (574 comparisons, 13 films). More viewers are needed
+- **Beta.** GRAILS is fitted on one viewer's blind judgments (574 verdicts, 13 films). More viewers are needed
   before it can promise an absolute "transparent" threshold.
+- **Grainy 2D animation is a weak spot.** On hand-drawn animation with film grain (Spirited Away, for example), the
+  line-art check doesn't switch on yet, and the grain model can favour an encode that keeps the grain even when it
+  rings around the lines. In the blind tests, GRAILS scored a failed x265 encode of one such scene above a passing
+  SVT-AV1 one (75.3 against 67.6), where plain SSIMULACRA2 had the passing one ahead, if only just (78.89 against
+  78.85). For grainy animation, check plain SSIMULACRA2 and your own eyes too.
 - The encode must have the source's resolution and frame rate, or be a crop of it.
 - HDR: HDR10 (PQ) only.
 - Scoring AV1 encodes that use film-grain synthesis needs the [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)

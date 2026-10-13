@@ -35,8 +35,8 @@ comparison of its statistics where it does:
 - `a`, `p_L`: the anime / line-art path. `a` is the confidence that the source is 2D line art (ink strokes drawn over
   flat colour, from the source only); `p_L` is ringing that the encode adds next to the source's lines.
 
-With no grain and no line art (`g = 0`, `a = 0`), GRAILS **is** SSIMULACRA2, exactly. In between, the score moves
-smoothly toward the grain-aware form. `Q <= 100` always; it reads in SSIMULACRA2 points.
+With no grain above the threshold (`sigma_g <= 0.25`, so `g = 0`) and no line art (`a = 0`), GRAILS **is**
+SSIMULACRA2, exactly. In between, the score moves smoothly toward the grain-aware form. `Q <= 100` always; it reads in SSIMULACRA2 points.
 
 Outputs: the GRAILS score; its parts (plain SSIMULACRA2, structure, the grain term `-sum w p`, the line-art term);
 the structure path (`synth` or `coded`); `g` and `sigma_g`; every penalty and raw feature; per-frame values with
@@ -72,6 +72,11 @@ candidate for a second release once more verdicts exist; the letter keeps the tw
 - **One reviewer.** The weights encode one person's tolerance (574 blind showings, 13 films). More reviewers are
   needed before a public pass threshold can be stated; until then, use GRAILS to compare encodes of the same source,
   not as an absolute grade.
+- **Grainy 2D animation.** The line-art detector looks for ink strokes over flat colour; on cel animation with film
+  grain (Spirited Away (2001) in the blind tests) it stays off (`a = 0`), and the grain branch (`g = 0.4` there) can
+  prefer an encode that keeps the grain while it rings next to the lines. Riding Haku (a later blind round, not in
+  the fit): x265 slow, failed, GRAILS 75.3 / SSIMULACRA2 78.85; SVT-AV1 4.2.0 preset 2, passed, GRAILS 67.6 /
+  SSIMULACRA2 78.89. On grainy animation, check plain SSIMULACRA2 and look.
 - **A fixed target is not stable across scenes.** The per-scene pass line still spreads by about 14-16 points (24-28
   CRF steps). Per-scene minimums work; one film-wide target does not.
 - **Heavy grain: prefer full mode.** Fast mode skips the denoise of AV1 synthetic-grain encodes; on heavy, coarse
