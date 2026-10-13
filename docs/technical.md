@@ -81,7 +81,12 @@ candidate for a second release once more verdicts exist; the letter keeps the tw
   path rests on one 2D film (Your Name (2016)); the score's top is flat at 100 on heavy grain (differences there come
   from the penalties only). Details: the model notes (`GRAINSCORE.md` in the lab).
 - The encode must have the source's resolution and frame rate, or be a crop of it; there is no scaling
-  (`--dist-start` aligns differing frame numbers). HDR: PQ (HDR10) only.
+  (`--dist-start` aligns differing frame numbers). Inputs are checked before scoring, and rejected with a message:
+  frame sizes must be even (4:2:0), windows and their origins even; pixel format 8- or 10-bit YUV (4:2:2 and 4:4:4
+  are converted to 4:2:0 by ffmpeg, as the reference did; RGB, grey and deeper formats are rejected); limited range only (full-range video, `pc` / `yuvj`, is never accepted); SDR read as
+  BT.709 (matrix and primaries BT.709 or unspecified; BT.709 / BT.601 transfer) and HDR as HDR10 (PQ, BT.2020).
+  Other matrices, primaries or transfers (HLG, BT.601 matrices, BT.2020 SDR) are rejected unless `--colour sdr|pq`
+  says how to read the file; source and encode must agree. HDR: PQ (HDR10) only.
 - Beta tool limits: Linux with NVIDIA (HIP compile-checked) and macOS on Apple silicon (Metal); frame-accurate seeking
   is by decoding from the start of the file; AV1 film grain needs the
   [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) dav1d build (a self-contained GPU grain renderer is
@@ -152,6 +157,10 @@ subsample) on the same 13 cases with |dQ| <= 0.0004.
 Hardware decoding (NVDEC) of the non-AV1 sources and encodes gives the same scores as software decoding (13 cases,
 identical).
 
+Two runs of the same CUDA build agree to about 1e-7 in Q (2.6e-8 on a 1080p AV1 case), not to the last bit: the
+grain-feature sums are added across thread blocks with float64 atomics, in whatever order the blocks finish. The
+measurement denoiser and SSIMULACRA2 are bit-reproducible; on clean content (g = 0, a = 0) Q is exactly S0 anyway.
+
 Whole-set check (PORT_SPEC gate: Spearman >= 0.995): every 4th (144) of the 574 judged showings (13 films, full mode): Spearman between the port's and the reference's Q 0.999993; |dQ| median 1.6e-07, max 0.0004; 0 failed to run.
 
 ### On Apple GPUs (Metal)
@@ -208,8 +217,33 @@ reductions in another order, and libvship's Vulkan build on MoltenVK instead of 
 - The one large per-frame value, 1.03 on SSIMULACRA2(Ds, Dc), is a single frame of a clean CGI case where the
   fast-math motion search picks another vector; its window mean is off by 0.013.
 - Runs are deterministic (the same build gives the same scores to the last digit).
-- `check-reference` keeps the CUDA port's tolerances: on Metal it flags the two per-frame SSIMULACRA2 rows above
-  ("OVER"); every window mean and Q are within them.
+- Under the backend acceptance policy below, these Metal numbers pass: every window mean and Q are within the
+  reference tolerances, and the two per-frame SSIMULACRA2 rows (0.046 and 1.03) within the other-backend ones.
+
+### Backend acceptance
+
+`grail check-reference` passes only if every case ran, no value is missing, non-finite or of another length than
+the reference's, the standard-decoder seed view agrees, Q <= 100 on every case, Q equals S0 to the last bit on every
+clean case (g = 0 and a = 0), the Spearman correlation between the port's and the reference's Q is at least 0.995
+(three or more cases), and every stage is within its tolerance; otherwise it exits non-zero.
+
+The tolerances depend on the backend. CUDA is the reference platform: its kernels are the Python reference's own and
+its denoiser is bit-exact, so it keeps the tight per-frame tolerances (plain SSIMULACRA2 0.01 per frame; the denoised
+pairs 1.0). Every other backend (Metal, HIP, a future CPU backend) must meet the same window-level tolerances and the
+same |dQ| <= 0.1, but its per-frame SSIMULACRA2 rows may be off by up to 0.1 (plain pair) and 1.5 (denoised pairs):
+another compiler's fast-math functions can move one frame's motion search (Metal: 1.03 on one frame of a clean CGI
+case, 0.013 on its window mean), which the window mean and Q absorb. A backend is accepted when `check-reference`
+passes under its tolerances on all 13 cases; the other-backend tolerances are not a licence for drift in the window
+means.
+
+### Compatibility quirks (GRAILS 0.2.1)
+
+Kept on purpose, because changing them would change scores:
+
+- `texloss` is 0, not infinite, when the texture energy ratio is exactly 0 (the encode has no energy at all in the
+  source's textured tiles): the Python reference reads `tex_energy_ratio or 1` (evaluate.py), while the formula in
+  PORT_SPEC.md, `max(0, -ln(ratio))`, would be infinite there. The port follows the reference.
+- Plain SSIMULACRA2 uses each file's chroma siting, the denoised pairs "left" (section above).
 
 ## Speed
 
@@ -280,6 +314,27 @@ Utility QoS is the useful setting for full mode: the encoder keeps 85 % of its s
 Fast mode is decode-bound and is starved under utility QoS while the encoder runs; schedule it between encodes or run
 it at normal priority.
 
+## Decoding and inputs
+
+- Decoding runs through ffmpeg with `-fps_mode passthrough` (every decoded frame once, in order: no frame duplicated
+  or dropped by a frame-rate guess). Each decoder's delivered frames are counted against its range (`decoded` in the
+  JSON report: delivered, expected); a stream with fewer frames than packets gets a warning (`warnings`), a scored
+  frame that is missing stops the score.
+- AV1 film grain is read from the frame headers of the whole stream (av1-fullgrain's parser, vendored in
+  `crates/grail/src/av1/`, no decoding): an encode is a synthetic-grain one if any shown frame applies grain
+  (`apply_grain = 1`), the reference's rule. A sequence that allows grain but where no frame applies it is scored as
+  coded (with a warning). If the stream cannot be inspected (ffmpeg error, parser error, no sequence header, no
+  frames) the score stops; it is never read as "no grain". The grain seeds of the standard-decoder seed view come from
+  the same parse.
+- An AV1 *source* whose frames apply grain is decoded with its grain rendered full-frame by the pinned av1-fullgrain
+  build, like an encode (deterministic, whatever the system libdav1d does); without `--fullgrain-lib` it is refused.
+- Every decode starts from an environment without `DAV1D_GRAIN*` variables (av1-fullgrain reads `DAV1D_GRAIN_MODE`,
+  `_MODE_FILE`, `_FORCE`, `_TEMPLATES`, `_WARMUP`, `_BANDS`, `_STATS`, `_SIMD`); the full-frame decode then sets
+  only `DAV1D_GRAIN_MODE=full` and `DAV1D_GRAIN_FORCE=1`, the grain-free decode only `DAV1D_GRAIN_FORCE=0`.
+- Timings in the JSON report: `ssimulacra2_wait` is the time the pipeline waited for the SSIMULACRA2 workers (full
+  queues and the final join), not their work; `ssimulacra2_calls` is the wall time inside libvship's calls summed over
+  the workers (it runs alongside the other stages).
+
 ## Third-party components and licences
 
 - **libvship** (SSIMULACRA2; the Vship project, the library under FFVship): "MIT NON-AI License", the MIT licence plus
@@ -290,6 +345,8 @@ it at normal priority.
   [flowdenoise](https://github.com/divergentnn/flowdenoise); same owner as this repository.
 - **FFmpeg** and **dav1d** are run as external programs / libraries (not included). The
   [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) build of libdav1d is BSD-2-Clause (as dav1d).
+- **av1-fullgrain's AV1 header parser** (`crates/grail/src/av1/obu.rs`, `params.rs`, BSD-2-Clause; licence text in
+  `crates/grail/src/av1/LICENSE-av1-fullgrain`): vendored, for the frame-level film grain detection.
 - **MoltenVK** and the **Vulkan loader** (Apache-2.0): libvship's Vulkan build runs on them on macOS; run-time
   dependencies of libvship, not of grail. **Slang** (`slangc`, Apache-2.0 with LLVM exception): build tool for two of
   libvship's shaders in `tools/build_libvship_macos.sh`.

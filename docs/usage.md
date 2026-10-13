@@ -32,15 +32,27 @@ $ grail score --batch pairs.jsonl --out scores.jsonl
 
 Each line takes `ref`, `dist` and optionally `id`, `start`, `dist_start`, `frames`, `crop`, `dist_crop`, `colour`,
 `fast`, `denoise_candidate`; the command-line options are the defaults. Each output line holds the id, a label
-("GRAILS 87.49", or "GRAILS 87.49 (fast)"), the score and its parts (the full report with `--json`); a failed pair
-gets an `error` field and the batch goes on.
+("GRAILS 87.49", or "GRAILS 87.49 (fast)"), the score and its parts (the full report with `--json`) and a
+`fingerprint`; a failed pair gets an `error` field and the batch goes on.
+
+- Resuming (`--out` again): a pair is skipped only if the file already holds a successful row with the same id and
+  the same fingerprint, a hash of the model version, the options that change a score, both media files' size,
+  modification time and first MiB (and the av1-fullgrain build, when used). A changed file or option scores the pair
+  again; the new row is appended, so take the last row of an id.
+- With `--json` the output holds no file names: failed rows carry only the id and the error, with the media paths in
+  the message replaced by `<ref>` / `<dist>`. Without `--json`, rows list `ref` and `dist`.
 
 Other commands:
 
 - `grail denoise IN.y4m OUT.y4m`: the measurement denoiser ([flowdenoise](https://github.com/divergentnn/flowdenoise))
   alone (10-bit 4:2:0 y4m; `-` for stdin / stdout).
 - `grail check-reference port_reference.json`: runs the reference's test cases and compares every intermediate value
-  (see [technical.md](technical.md#exactness-against-the-python-reference); needs the lab's media).
+  (see [technical.md](technical.md#exactness-against-the-python-reference); needs the lab's media). It exits non-zero
+  unless every case ran and every check passed ([backend acceptance](technical.md#backend-acceptance)). With
+  `--fast-variants` it checks the fast mode against the reference's fast-mode inputs; `--skip-missing` lists (instead
+  of failing) cases that have no fast-mode reference row.
+- `grail inspect-grain FILE...`: the AV1 film grain of streams from their frame headers (whether the sequence allows
+  grain, whether any frame applies it, shown frames), one JSON line per file; exits non-zero if a file cannot be read.
 
 Environment: `GRAIL_VSHIP`, `GRAIL_FULLGRAIN_LIB`, `GRAIL_BACKEND`, `GRAIL_GPU` (device index), `GRAIL_METAL_PROFILE`
 (macOS), `GRAIL_MEM_MB`

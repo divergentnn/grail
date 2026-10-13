@@ -99,4 +99,10 @@ pub trait Backend {
     /// sc = 2 if the source height > 1600 else 1
     fn features(&self, w: usize, h: usize, sc: f64) -> Result<Box<dyn GrainFeatures>>;
     fn lineart(&self, w: usize, h: usize) -> Result<Box<dyn LineArt>>;
+    /// true for the backend the reference tolerances of `grail check-reference` are set for: CUDA, whose kernels
+    /// are the Python reference's own (bit-exact denoiser). Other backends (HIP, Metal, a CPU backend) are accepted
+    /// against the same window-level tolerances but looser per-frame ones (docs/technical.md, "Backend acceptance").
+    fn reference_platform(&self) -> bool {
+        false
+    }
 }

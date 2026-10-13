@@ -1,4 +1,5 @@
 //! grail: GRAILS, the grain- and line-art-aware quality score on the SSIMULACRA2 scale (beta).
+mod av1;
 mod batch;
 mod check;
 mod decode;
@@ -35,7 +36,8 @@ enum Cmd {
         /// the defaults); writes one JSON line per pair (summary, or the full report with --json)
         #[arg(long, conflicts_with_all = ["reference", "dist"])]
         batch: Option<PathBuf>,
-        /// --batch: write the results here instead of stdout (pairs already in the file are skipped)
+        /// --batch: append the results here instead of stdout; a pair already in the file with the same model,
+        /// score-changing options and media (size, time, first MiB) is skipped
         #[arg(long, requires = "batch")]
         out: Option<PathBuf>,
         /// every 4th frame plus its successor; AV1 synthetic-grain candidates are not denoised
@@ -87,6 +89,11 @@ enum Cmd {
         input: PathBuf,
         output: PathBuf,
     },
+    /// AV1 film grain of streams, from their frame headers: whether the sequence allows grain, whether any frame
+    /// applies it, shown frames (one JSON line per file)
+    InspectGrain {
+        files: Vec<PathBuf>,
+    },
     /// run the cases of the Python reference's port_reference.json and compare every intermediate value
     CheckReference {
         /// port_reference.json
@@ -113,6 +120,9 @@ enum Cmd {
         /// fast mode, compared with the reference's fast-mode inputs (variants*.jsonl, comma-separated)
         #[arg(long)]
         fast_variants: Option<String>,
+        /// with --fast-variants: skip (and list) cases without a fast-mode reference row instead of failing
+        #[arg(long, requires = "fast_variants")]
+        skip_missing: bool,
     },
 }
 
@@ -207,11 +217,28 @@ fn run() -> Result<()> {
             }
         }
         Cmd::Denoise { input, output } => denoise_y4m(&input, &output)?,
-        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, every, offset, fast_variants, hwdec } => {
+        Cmd::InspectGrain { files } => {
+            let mut bad = 0;
+            for f in &files {
+                match decode::inspect_av1_grain(f) {
+                    Ok(g) => println!("{}", serde_json::json!({"file": f, "supports": g.supports, "applies": g.applies,
+                                                                "frames": g.frames,
+                                                                "grain_frames": g.seeds.iter().filter(|s| s.is_some()).count()})),
+                    Err(e) => {
+                        bad += 1;
+                        println!("{}", serde_json::json!({"file": f, "error": format!("{e:#}")}));
+                    }
+                }
+            }
+            if bad > 0 {
+                bail!("{bad} of {} files could not be inspected", files.len());
+            }
+        }
+        Cmd::CheckReference { file, only, fullgrain_lib, threads, out, every, offset, fast_variants, skip_missing, hwdec } => {
             check::set_hwdec(parse_hwdec(&hwdec)?);
             match fast_variants {
                 Some(v) => check::run_fast(&file, &v, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model,
-                                           new_backend()?.as_ref())?,
+                                           new_backend()?.as_ref(), skip_missing)?,
                 None => check::run(&file, only.as_deref(), fullgrain_lib, threads, out.as_deref(), &model, every, offset,
                                    new_backend()?.as_ref())?,
             }

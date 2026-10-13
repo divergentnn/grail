@@ -2,7 +2,7 @@
 //! afterwards), SSIMULACRA2 pairs, grain features, line-art path, model. One pass over the frames: every stage streams
 //! (the denoiser keeps radius 3 frames on each side), except the reference's active-picture scan, which needs all of
 //! its frames first (kept in memory up to GRAIL_MEM_MB, else decoded twice).
-use crate::decode::{self, av1_film_grain_present, probe, DecodeSpec, Decoder, Grain, Probe};
+use crate::decode::{self, inspect_av1_grain, probe, DecodeSpec, Decoder, Grain, GrainInfo, Probe};
 use crate::model::{self, Feats, Model};
 use crate::seed::{seed_view, SeedView};
 use crate::vship::{Colour, Vship};
@@ -114,6 +114,11 @@ pub struct Report {
     pub per_frame: PerFrame,
     pub gpu: String,
     pub timings: BTreeMap<String, f64>,
+    /// frames each decoder delivered and the frames its range asked for (decoded-frame accounting)
+    pub decoded: BTreeMap<String, [usize; 2]>,
+    /// conditions that did not stop the score but are worth knowing (e.g. a stream shorter than its packet count)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 fn even_box(act: [i64; 4], w: usize, h: usize) -> [usize; 4] {
@@ -291,6 +296,47 @@ impl Stream {
     }
 }
 
+/// Colour handling GRAILS supports: limited range; SDR as BT.709 (matrix, primaries; BT.709 / BT.601 transfer) or
+/// HDR10 (PQ, BT.2020 non-constant luminance, BT.2020 primaries). Unspecified tags are read as the supported ones.
+/// Full range is always rejected; other matrices, primaries or transfers are rejected unless --colour says how to
+/// read the file.
+fn check_colour(p: &Probe, path: &std::path::Path, forced: bool) -> Result<Colour> {
+    let un = |v: &str| v.is_empty() || v == "unknown" || v == "unspecified";
+    if p.range == "pc" || p.range == "jpeg" {
+        bail!("{}: full-range video is not supported (GRAILS reads limited range only)", path.display());
+    }
+    if p.pix_fmt.starts_with("yuvj") {
+        bail!("{}: full-range video ({}) is not supported (GRAILS reads limited range only)", path.display(), p.pix_fmt);
+    }
+    // 8- or 10-bit YUV; 4:2:2 and 4:4:4 are converted to 4:2:0 by ffmpeg, as the reference did (one of its cases has
+    // a 4:4:4 source); RGB, grey, alpha and deeper formats are not supported
+    let fmt_ok = matches!(p.pix_fmt.as_str(), "yuv420p" | "yuv420p10le" | "yuv420p10be" | "yuv422p" | "yuv422p10le"
+                          | "yuv422p10be" | "yuv444p" | "yuv444p10le" | "yuv444p10be");
+    if !p.pix_fmt.is_empty() && !fmt_ok {
+        bail!("{}: pixel format {} is not supported (8- or 10-bit YUV only; convert first)", path.display(), p.pix_fmt);
+    }
+    if p.transfer == "smpte2084" {
+        let ok = (un(&p.matrix) || p.matrix == "bt2020nc") && (un(&p.primaries) || p.primaries == "bt2020");
+        if !ok && !forced {
+            bail!("{}: PQ with matrix {} / primaries {} is not supported (HDR10 is BT.2020; pass --colour pq to \
+                   read it as HDR10)", path.display(), p.matrix, p.primaries);
+        }
+        return Ok(Colour::Pq);
+    }
+    let tr_ok = un(&p.transfer) || p.transfer == "bt709" || p.transfer == "smpte170m" || p.transfer == "bt470bg";
+    let ok = tr_ok && (un(&p.matrix) || p.matrix == "bt709") && (un(&p.primaries) || p.primaries == "bt709");
+    if !ok && !forced {
+        bail!("{}: transfer {} / matrix {} / primaries {} not supported (SDR is read as BT.709, HDR as HDR10 PQ; HLG \
+               and other colour spaces are not; pass --colour sdr|pq to read it anyway)",
+              path.display(), or_un(&p.transfer), or_un(&p.matrix), or_un(&p.primaries));
+    }
+    Ok(Colour::Sdr)
+}
+
+fn or_un(v: &str) -> &str {
+    if v.is_empty() { "unspecified" } else { v }
+}
+
 fn mean(v: &[f64]) -> f64 {
     v.iter().sum::<f64>() / v.len().max(1) as f64
 }
@@ -300,14 +346,45 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     let mut tm: BTreeMap<String, f64> = BTreeMap::new();
     let pr = probe(&o.reference)?;
     let pd = probe(&o.dist)?;
-    let colour = o.colour.unwrap_or(if pr.transfer == "smpte2084" { Colour::Pq } else { Colour::Sdr });
-    let synth = pd.codec == "av1" && av1_film_grain_present(&o.dist)?;
-    let fg_lib = if synth {
+    for (p, path) in [(&pr, &o.reference), (&pd, &o.dist)] {
+        if p.width % 2 == 1 || p.height % 2 == 1 {
+            bail!("{}: odd frame size {}x{}: 4:2:0 frames with odd dimensions are not supported", path.display(),
+                  p.width, p.height);
+        }
+    }
+    let cr = check_colour(&pr, &o.reference, o.colour.is_some())?;
+    let cd = check_colour(&pd, &o.dist, o.colour.is_some())?;
+    if cr != cd && o.colour.is_none() {
+        bail!("the source is {} and the encode {}: they must match (or pass --colour)",
+              if cr == Colour::Pq { "HDR10 (PQ)" } else { "SDR" }, if cd == Colour::Pq { "HDR10 (PQ)" } else { "SDR" });
+    }
+    let colour = o.colour.unwrap_or(cr);
+    // AV1 film grain: any shown frame applying grain (the reference's contract), from the frame headers; an
+    // inspection failure stops the score (it is never read as "no grain")
+    let gi_dist: Option<GrainInfo> = if pd.codec == "av1" { Some(inspect_av1_grain(&o.dist)?) } else { None };
+    let gi_ref: Option<GrainInfo> = if pr.codec == "av1" { Some(inspect_av1_grain(&o.reference)?) } else { None };
+    let synth = gi_dist.as_ref().map(|g| g.applies).unwrap_or(false);
+    let ref_grain = gi_ref.as_ref().map(|g| g.applies).unwrap_or(false);
+    let mut warnings: Vec<String> = vec![];
+    let mut decoded: BTreeMap<String, [usize; 2]> = BTreeMap::new();
+    if let Some(g) = &gi_dist {
+        if g.supports && !g.applies {
+            warnings.push("the encode's AV1 sequence allows film grain but no frame applies it: scored as coded".into());
+        }
+    }
+    for (g, p, what) in [(&gi_dist, &pd, "encode"), (&gi_ref, &pr, "source")] {
+        if let Some(g) = g {
+            if p.packets > 0 && g.frames != p.packets {
+                warnings.push(format!("{what}: {} shown frames in the AV1 frame headers, {} packets", g.frames, p.packets));
+            }
+        }
+    }
+    let fg_lib = if synth || ref_grain {
         let lib = o.fullgrain_lib.clone().or_else(|| std::env::var("GRAIL_FULLGRAIN_LIB").ok().map(PathBuf::from));
         let Some(lib) = lib else {
             bail!("{} carries AV1 film grain: GRAILS scores it rendered full-frame and needs the av1-fullgrain \
                    dav1d build (--fullgrain-lib DIR or GRAIL_FULLGRAIN_LIB); standard tiled grain is never scored",
-                  o.dist.display());
+                  if synth { o.dist.display() } else { o.reference.display() });
         };
         decode::check_fullgrain_lib(&lib)?;
         Some(lib)
@@ -360,17 +437,25 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         if dwin[2] != w || dwin[3] != h || dwin[0] + w > pd.width || dwin[1] + h > pd.height {
             bail!("candidate window {:?} does not fit (window {w}x{h}, candidate {}x{})", dwin, pd.width, pd.height);
         }
+        if dwin.iter().any(|v| v % 2 == 1) {
+            bail!("candidate window {:?} must be even (4:2:0 chroma)", dwin);
+        }
         Ok(dwin)
     };
+    if let Crop::Rect(r) = o.crop {
+        if r.iter().any(|v| v % 2 == 1) {
+            bail!("window {:?} must be even (4:2:0 chroma)", r);
+        }
+    }
     let early_dwin = match o.crop {
         Crop::Rect(r) => Some(dist_window(r)?),
         Crop::Auto => None,
     };
     // candidate decoders start first and run while the reference is scanned (queues sized by the memory budget)
     let t0 = Instant::now();
-    let dgrain = match &fg_lib {
-        Some(l) => Grain::FullFrame(l.clone()),
-        None => Grain::Plain,
+    let dgrain = match (&fg_lib, synth) {
+        (Some(l), true) => Grain::FullFrame(l.clone()),
+        _ => Grain::Plain,
     };
     let ccrop = if denoise_cand { None } else { early_dwin };
     let (cw, ch) = match ccrop { Some(c) => (c[2], c[3]), None => (pd.width, pd.height) };
@@ -386,8 +471,14 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         None
     };
     // reference: all frames for the active-picture scan (kept in memory within the budget, else decoded again)
+    // an AV1 source with film grain is watched with its grain rendered full-frame, like an encode (deterministic: the
+    // pinned av1-fullgrain build, not whatever the system libdav1d does)
+    let rgrain = match (&fg_lib, ref_grain) {
+        (Some(l), true) => Grain::FullFrame(l.clone()),
+        _ => Grain::Plain,
+    };
     let rspec = DecodeSpec { path: o.reference.clone(), av1: pr.codec == "av1", a: ra, b: rb, crop: None,
-                             grain: Grain::Plain, threads, hwaccel: hw(&pr), w: pr.width, h: pr.height };
+                             grain: rgrain, threads, hwaccel: hw(&pr), w: pr.width, h: pr.height };
     let fbytes = pr.width * pr.height * 3;
     let mut scan = ActiveScan::new(pr.width, pr.height);
     let mut mem: VecDeque<Vec<u16>> = VecDeque::new();
@@ -404,7 +495,8 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
                 }
             }
         }
-        d.finish()?;
+        let got = d.finish()?;
+        decoded.insert("reference".into(), [got, rb - ra]);
     }
     tm.insert("decode_reference_scan".into(), t0.elapsed().as_secs_f64());
     let ract = even_box(scan.result(), pr.width, pr.height);
@@ -462,7 +554,8 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     let mut pf = PerFrame::default();
     let (mut det_tex, mut det_ink) = (vec![], vec![]);
     let mut last: Option<usize> = None;
-    let mut t_metric = 0.0;
+    let mut t_metric_wait = 0.0;
+    let mut t_metric_calls = 0.0;
     let mut t_feat = 0.0;
     let mut t_den = 0.0;
     let mut t_la = 0.0;
@@ -471,8 +564,17 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
     // through short queues, so they overlap the denoise, features and line art of the following frames; the main
     // thread only waits when a queue is full and at the end
     type Pair = (std::sync::Arc<Vec<u16>>, std::sync::Arc<Vec<u16>>);
-    let metric_worker = |h: &crate::vship::Ssimu2<'_>, rx: std::sync::mpsc::Receiver<Pair>| -> Result<Vec<f64>> {
-        rx.into_iter().map(|(a, b)| h.score(&a, &b)).collect()
+    // each worker also sums the wall time spent inside libvship's calls (host conversion, upload, GPU kernels): what
+    // SSIMULACRA2 costs, most of it hidden behind the other stages
+    let metric_worker = |h: &crate::vship::Ssimu2<'_>, rx: std::sync::mpsc::Receiver<Pair>| -> Result<(Vec<f64>, f64)> {
+        let mut busy = 0.0;
+        let mut v = vec![];
+        for (a, b) in rx {
+            let t = Instant::now();
+            v.push(h.score(&a, &b)?);
+            busy += t.elapsed().as_secs_f64();
+        }
+        Ok((v, busy))
     };
     std::thread::scope(|sc| -> Result<()> {
         let mut queues = vec![];
@@ -490,7 +592,7 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         let mut send = |k: usize, pair: Pair| -> bool {
             let tt = Instant::now();
             let ok = queues[k].as_ref().map(|q| q.send(pair).is_ok()).unwrap_or(true);
-            t_metric += tt.elapsed().as_secs_f64();
+            t_metric_wait += tt.elapsed().as_secs_f64();
             ok
         };
         let mut run = || -> Result<()> {
@@ -543,35 +645,61 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         for w in workers {
             res.push(w.map(|h| h.join().unwrap_or_else(|_| Err(anyhow::anyhow!("libvship thread panicked")))));
         }
-        t_metric += tt.elapsed().as_secs_f64();
+        t_metric_wait += tt.elapsed().as_secs_f64();
         r?;
         let mut res = res.into_iter();
-        pf.ssimulacra2 = res.next().flatten().transpose()?.unwrap_or_default();
-        pf.s_d = res.next().flatten().transpose()?.unwrap_or_default();
-        pf.s_dp = res.next().flatten().transpose()?.unwrap_or_default();
-        if pf.ssimulacra2.len() != pf.frame.len() {
-            bail!("SSIMULACRA2: {} of {} frames scored", pf.ssimulacra2.len(), pf.frame.len());
+        let mut take = |busy: &mut f64| -> Result<Vec<f64>> {
+            Ok(match res.next().flatten().transpose()? {
+                Some((v, b)) => {
+                    *busy += b;
+                    v
+                }
+                None => vec![],
+            })
+        };
+        pf.ssimulacra2 = take(&mut t_metric_calls)?;
+        pf.s_d = take(&mut t_metric_calls)?;
+        pf.s_dp = take(&mut t_metric_calls)?;
+        for (what, v, on) in [("plain", &pf.ssimulacra2, true), ("denoised pair", &pf.s_d, denoise_cand),
+                              ("grain-free pair", &pf.s_dp, synth)] {
+            if on && v.len() != pf.frame.len() {
+                bail!("SSIMULACRA2 ({what}): {} of {} frames scored", v.len(), pf.frame.len());
+            }
         }
         Ok(())
     })?;
-    // drain the decoders (ffmpeg exits cleanly) and collect the seeds of the grain-free decode
-    let drain = |src: Source| -> Result<Vec<(usize, u32)>> {
+    // drain the decoders (ffmpeg exits cleanly) and account for the frames each delivered
+    let drain = |src: Source| -> Result<Option<usize>> {
         match src {
             Source::Live(mut d) => {
                 while d.next().is_some() {}
-                Ok(d.finish()?.1)
+                Ok(Some(d.finish()?))
             }
-            Source::Mem(_) => Ok(vec![]),
+            Source::Mem(_) => Ok(None),
         }
     };
     tm.insert("decode_wait_reference".into(), rstream.wait);
     tm.insert("decode_wait_candidate".into(), cstream.wait);
-    drain(rstream.src)?;
-    drain(cstream.src)?;
-    let mut seeds_raw = vec![];
+    if let Some(k) = drain(rstream.src)? {
+        decoded.insert("reference".into(), [k, rb - ra]);
+    }
+    if let Some(k) = drain(cstream.src)? {
+        decoded.insert("candidate".into(), [k, db - da]);
+    }
     if let Some(st) = ngstream {
         tm.insert("decode_wait_grain_free".into(), st.wait);
-        seeds_raw = drain(st.src)?;
+        if let Some(k) = drain(st.src)? {
+            decoded.insert("grain_free".into(), [k, db - da]);
+        }
+    }
+    for (name, [got, want]) in &decoded {
+        if got > want {
+            bail!("{name}: ffmpeg delivered {got} frames for a range of {want}");
+        }
+        if got < want {
+            warnings.push(format!("{name}: {got} frames decoded of {want} in its range (the stream has fewer frames \
+                                   than packets); scored frames are all present, fewer context frames at the end"));
+        }
     }
     let t_wall = t_start.elapsed().as_secs_f64();
 
@@ -595,12 +723,16 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         term = -(1.0 - gg) * a * model.la_w * p_l;
         q += term;
     }
+    // grain seed of each scored frame from the encode's frame headers (the reference took them from the bitstream
+    // too: av1-grain-seed, which the vendored parser ports)
     let seeds: Vec<Option<u32>> = (0..n).map(|t| {
-        let o_idx = dfirst + t;
-        seeds_raw.iter().find(|(i, _)| *i == o_idx).map(|(_, s)| *s)
+        gi_dist.as_ref().filter(|g| g.applies).and_then(|g| g.seeds.get(ds + t).copied().flatten())
     }).collect();
     tm.insert("denoise_and_decode".into(), t_den);
-    tm.insert("ssimulacra2".into(), t_metric);
+    // ssimulacra2_wait: time the pipeline waited on the SSIMULACRA2 workers (full queues, the final join);
+    // ssimulacra2_calls: wall time inside libvship's calls, summed over the workers (runs alongside the other stages)
+    tm.insert("ssimulacra2_wait".into(), t_metric_wait);
+    tm.insert("ssimulacra2_calls".into(), t_metric_calls);
     tm.insert("features".into(), t_feat);
     tm.insert("lineart".into(), t_la);
     tm.insert("total".into(), t_wall);
@@ -634,6 +766,8 @@ pub fn score(o: &Opts, model: &Model, backend: &dyn Backend) -> Result<Report> {
         per_frame: pf,
         gpu: backend.name(),
         timings: tm,
+        decoded,
+        warnings,
     })
 }
 
@@ -662,5 +796,40 @@ fn finish_features(t: &FeatureTotals) -> Feats {
         stickc_c: model::median(&t.stickc[1]),
         tex_energy_ratio: if t.vs != 0.0 { Some(t.vc / t.vs) } else { None },
         p_ng: if t.has_ng { Some(norm(&t.p_ng)) } else { None },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn probe(range: &str, matrix: &str, primaries: &str, transfer: &str, pix: &str) -> Probe {
+        Probe { width: 1920, height: 1080, codec: "hevc".into(), packets: 10, transfer: transfer.into(),
+                chroma_location: String::new(), range: range.into(), matrix: matrix.into(), primaries: primaries.into(),
+                pix_fmt: pix.into() }
+    }
+
+    #[test]
+    fn colour_checks() {
+        let p = std::path::Path::new("x.mkv");
+        assert_eq!(check_colour(&probe("tv", "bt709", "bt709", "bt709", "yuv420p"), p, false).unwrap(), Colour::Sdr);
+        assert_eq!(check_colour(&probe("", "", "", "", "yuv420p"), p, false).unwrap(), Colour::Sdr);
+        assert_eq!(check_colour(&probe("tv", "bt2020nc", "bt2020", "smpte2084", "yuv420p10le"), p, false).unwrap(),
+                   Colour::Pq);
+        // full range: never, not even with --colour
+        assert!(check_colour(&probe("pc", "bt709", "bt709", "bt709", "yuv420p"), p, true).is_err());
+        assert!(check_colour(&probe("tv", "bt709", "bt709", "bt709", "yuvj420p"), p, true).is_err());
+        // 4:4:4 is converted (as the reference did); more than 10 bits or RGB: never
+        assert!(check_colour(&probe("tv", "bt709", "bt709", "bt709", "yuv444p10le"), p, false).is_ok());
+        assert!(check_colour(&probe("tv", "bt709", "bt709", "bt709", "yuv420p12le"), p, true).is_err());
+        assert!(check_colour(&probe("tv", "bt709", "bt709", "bt709", "gbrp10le"), p, true).is_err());
+        // HLG, BT.601 matrix, BT.2020 SDR: only with --colour
+        for pr in [probe("tv", "bt2020nc", "bt2020", "arib-std-b67", "yuv420p10le"),
+                   probe("tv", "smpte170m", "smpte170m", "smpte170m", "yuv420p"),
+                   probe("tv", "bt2020nc", "bt2020", "bt2020-10", "yuv420p10le"),
+                   probe("tv", "bt709", "bt709", "smpte2084", "yuv420p10le")] {
+            assert!(check_colour(&pr, p, false).is_err(), "{pr:?}");
+            assert!(check_colour(&pr, p, true).is_ok(), "{pr:?}");
+        }
     }
 }

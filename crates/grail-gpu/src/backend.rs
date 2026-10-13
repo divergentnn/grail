@@ -23,19 +23,23 @@ pub fn dev(w: &mut Win) -> Result<u64> {
 
 pub struct GpuBackend {
     pub device: String,
+    pub cuda: bool,
 }
 
 impl GpuBackend {
     pub fn new() -> Result<GpuBackend> {
         let g = crate::driver::try_init()?;
         g.bind_thread()?;
-        Ok(GpuBackend { device: format!("{} ({:?})", g.device_name, g.backend) })
+        Ok(GpuBackend { device: format!("{} ({:?})", g.device_name, g.backend), cuda: g.backend == crate::driver::Backend::Cuda })
     }
 }
 
 impl Backend for GpuBackend {
     fn name(&self) -> String {
         self.device.clone()
+    }
+    fn reference_platform(&self) -> bool {
+        self.cuda
     }
     fn denoiser(&self, w: usize, h: usize) -> Result<Box<dyn Denoise>> {
         Ok(Box::new(GpuDenoise { d: Denoiser::new(w, h)?, out: DBuf::new(w * h * 3)?, orig: None, aw: w, ah: h }))

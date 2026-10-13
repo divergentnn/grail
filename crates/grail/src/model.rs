@@ -143,6 +143,10 @@ pub fn penalties(f: &Feats) -> BTreeMap<String, f64> {
     p.insert("chroma".into(), chroma);
     p.insert("stick".into(), z(f.stick_c, f.stick_s) * gvis);
     p.insert("stickc".into(), z(f.stickc_c, f.stickc_s) * gvis);
+    // 0.2.1 compatibility quirk, kept on purpose: a texture energy ratio of exactly 0 (the candidate has no energy in
+    // the source's textured tiles) gives NO texloss, because the reference reads `tex_energy_ratio or 1`
+    // (evaluate.py:132), while PORT_SPEC.md's formula max(0, -ln(ratio)) would make it infinite. Changing it would
+    // change scores; it is documented in docs/technical.md ("Compatibility quirks").
     let ter = match f.tex_energy_ratio {
         Some(r) if r != 0.0 => r,
         _ => 1.0,

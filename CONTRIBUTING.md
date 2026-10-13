@@ -36,7 +36,8 @@ For model 0.2.1, these fields matter:
 | `model_version`, `tool_version`, `mode`, `frames`, `frames_scored`, `window`, `active`, `colour`, `codec` | what was scored, and how |
 
 Send the whole report anyway: it is small, and the rest (`score`, `g`, `penalties`, `per_frame`) makes checking
-easier. The report holds no file names (batch output without `--json` does: it lists `ref` and `dist`; use `--json`).
+easier. The report holds no file names, failed batch rows included (batch output without `--json` does: it lists
+`ref` and `dist`; use `--json`).
 Keep your sources and encodes: a later model may measure something new, and then the lab may ask you to rescore them
 with a newer `grail`.
 
