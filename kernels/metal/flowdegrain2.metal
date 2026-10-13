@@ -133,7 +133,7 @@ kernel void dense(constant DenseArgs& P [[buffer(0)]], KARGS) {
  f[i]=sx/fmax(sw,1e-6f);f[W*H+i]=sy/fmax(sw,1e-6f);
 }
 static inline float lanc(float d) {d=fabs(d);if(d<1e-6f)return 1; if(d>=3)return 0;
- return sinpi(d)*sinpi(d/3)/(3.289868133696453f*d*d);}
+ return sin(M_PI_F*d)*sin(M_PI_F*d/3)/(3.289868133696453f*d*d);}
 static inline float warp(cfp a,float x,float y,int W,int H) {
  int ix=(int)floor(x),iy=(int)floor(y);float wx[6],wy[6],sx=0,sy=0;
  #pragma unroll
