@@ -11,8 +11,7 @@ blur, blocking and smearing. It also checks what SSIMULACRA2 is weak on, such as
 2D animation. On clean footage with no grain and no line art, it gives exactly the SSIMULACRA2 score you already know.
 With GRAIL you can trust your scores where SSIMULACRA2 falls short.
 
-The score is called **GRAILS**: GRAIL built on **S**SIMULACRA2. Always write the S ("GRAILS 87"), because other
-flavours may follow and their numbers aren't interchangeable.
+The score is called **GRAILS**: GRAIL built on **S**SIMULACRA2.
 
 ```
 $ grail score --ref source.mkv --dist encode.mkv
