@@ -6,8 +6,9 @@ There are two ways to help: judge encodes for the calibration of GRAILS (needed 
 
 ### Why
 
-GRAILS (model 0.2.1) is fitted on the blind judgments of one viewer: 574 showings of 13 films, on one display. That
-is enough to rank encodes of the same scene well, but not to say where an average viewer starts to see a problem.
+GRAILS (model 0.2.2, with the fit of 0.2.1) is fitted on the blind judgments of one viewer: 574 showings of 13
+films, on one display. That is enough to rank encodes of the same scene well, but not to say where an average viewer
+starts to see a problem.
 GRAILS 1.0 needs:
 
 - **more viewers**, so the scores reflect more than one person's tolerance;
@@ -25,7 +26,7 @@ Contributors never send video, frames or screenshots. You:
 4. send in the JSON reports with your verdicts.
 
 The JSON report holds every number the model is fitted on, so the lab can refit GRAILS from it without the video.
-For model 0.2.1, these fields matter:
+For model 0.2.2, these fields matter:
 
 | field | what it is |
 |---|---|

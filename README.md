@@ -15,7 +15,7 @@ The score is called **GRAILS**: GRAIL built on **S**SIMULACRA2.
 
 ```
 $ grail score --ref source.mkv --dist encode.mkv
-GRAILS 87.49  (full mode, GRAILS model 0.2.1, grail 0.1.0-beta.1)
+GRAILS 87.49  (full mode, GRAILS model 0.2.2, grail 0.1.0-beta.2)
   SSIMULACRA2          70.42
   ...
 ```
@@ -228,10 +228,11 @@ most of its speed.
 - Scoring AV1 encodes that use film-grain synthesis needs the [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)
   decoder build. Without it, grail refuses to score them rather than score the wrong grain. `grail inspect-grain
   FILE` tells you whether an AV1 file's frames apply film grain.
-- **Version numbers.** Every score is printed with its model: GRAILS model 0.2.1 today. While GRAILS is below 1.0,
-  any change that moves scores bumps the middle number (the next model will be 0.3.0), so scores are only comparable
-  within one model version. 1.0 comes when calibration from other viewers is in and the scores are stable. The tool
-  has its own version (grail 0.1.0-beta.1).
+- **Version numbers.** Every score is printed with its model: GRAILS model 0.2.2 today (the scores of 0.2.1; 0.2.2
+  revised only the separate standard-decoder seed view). While GRAILS is below 1.0, any change that moves scores
+  bumps the middle number (the next model will be 0.3.0), so scores are only comparable within one minor version. 1.0
+  comes when calibration from other viewers is in and the scores are stable. The tool has its own version (grail
+  0.1.0-beta.2).
 
 ## Help calibrate GRAILS
 

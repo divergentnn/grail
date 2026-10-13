@@ -1,6 +1,6 @@
 {
- "note": "GRAILS model 0.2.1 = the lab's grainscore v2.1 (fit21.py model, 2026-10-12): Ds_full features (feat_full*.jsonl); structure = S_D' for AV1 synthetic-grain candidates, S_D mapped onto its scale otherwise (struct); no floor term; grain branch refit on every showing; lineart = anime path refit with the branch frozen",
- "version": "0.2.1",
+ "note": "GRAILS 0.2.2 = 0.2.1 scores unchanged (lab v2.1 model); 0.2.2 changes only the standard-decoder seed view (table without the repetition metric, height-independent, stripe degeneracy checked at run time). GRAILS 0.2.1 (lab v2.1) (fit21.py model, 2026-10-12): Ds_full features (feat_full*.jsonl); structure = S_D' for AV1 synthetic-grain candidates, S_D mapped onto its scale otherwise (struct); no floor term; grain branch refit on every showing; lineart = anime path refit with the branch frozen",
+ "version": "0.2.2",
  "base": "ssimu2",
  "terms": [
   "under",
@@ -63,5 +63,6 @@
   "tau": 1.5,
   "w": 35.3973
  },
- "n_showings": 574
+ "n_showings": 574,
+ "lab": "v2.1"
 }

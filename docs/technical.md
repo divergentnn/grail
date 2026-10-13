@@ -42,9 +42,15 @@ in SSIMULACRA2 points.
 Outputs: the GRAILS score; its parts (plain SSIMULACRA2, structure, the grain term `-sum w p`, the line-art term);
 the structure path (`synth` or `coded`); `g` and `sigma_g`; every penalty and raw feature; per-frame values with
 `--json`; the flavour, the mode and the GRAILS model version (`model_version`). A separate, uncalibrated
-"standard-decoder seed view" rates each frame's AV1 grain seed for players that tile the grain: clumps and voids in
-the grain patch it makes, and stripe-degenerate seeds
-([example](examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)); it never enters the score.
+"standard-decoder seed view" rates each frame's AV1 grain seed for players that tile the grain: clumps, voids and
+blotches in the grain patch it makes, and stripe-degenerate seeds
+([example](examples.md#av1-grain-seeds-in-standard-players-black-swan-2010)); it never enters the score. Model 0.2.2
+revised it: its table no longer counts how much a seed's patch repeats (the viewer minds clumps and holes, not
+repetition) and no longer depends on the frame height (a seed that makes striped patches at some heights is checked
+against the actual height when the encode is scored). The JSON report (`std_decoder`) gives `seed_frames`,
+`seed_pct_mean`, `seed_pct_p90`, `seed_pct_worst` (0 best .. 100 worst), `seed_bad_share` (frames worse than 90),
+`seed_degenerate`, and, informational only and summarised nowhere, `info.template_overlap_share` (frames whose patch
+largely repeats one of the previous three frames').
 
 ## Flavour naming rule
 
@@ -58,13 +64,15 @@ candidate for a second release once more verdicts exist; the letter keeps the tw
 ## Version numbers
 
 - **The model.** Every score carries the version of the model that produced it: "GRAILS 87.49 (full mode, GRAILS
-  model 0.2.1, grail 0.1.0-beta.1)"; `model_version` in the JSON report; `version` in `crates/grail/data/weights.json`.
-  The current model is **0.2.1 = the lab's v2.1** (calibration of 2026-10-12: 574 blind showings, 13 films, one
-  viewer). The next model, fitted in the lab as v2.2, will be 0.3.0.
+  model 0.2.2, grail 0.1.0-beta.2)"; `model_version` in the JSON report; `version` in `crates/grail/data/weights.json`.
+  The current model is **0.2.2**: the scores of 0.2.1 = the lab's v2.1 (calibration of 2026-10-12: 574 blind
+  showings, 13 films, one viewer), with a revised standard-decoder seed view (below). The next model, fitted in the
+  lab as v2.2, will be 0.3.0.
 - **The rule.** GRAILS stays below 1.0 while it is in beta, and below 1.0 any change that moves scores bumps the minor
-  number (0.2 -> 0.3). Scores are comparable only within one model version. 1.0 comes when calibration from other
-  viewers is in and the scores are stable.
-- **The tool** (the `grail` crate, 0.1.0-beta.1) has its own version. A tool change that is not a model change must
+  number (0.2 -> 0.3); a change that leaves every score alone (0.2.1 -> 0.2.2: only the separate seed view) bumps the
+  last number. Scores are comparable only within one minor version. 1.0 comes when calibration from other viewers is
+  in and the scores are stable.
+- **The tool** (the `grail` crate, 0.1.0-beta.2) has its own version. A tool change that is not a model change must
   not move scores: on CUDA a refactor gives identical scores, and other backends stay within `check-reference`'s
   tolerances.
 
@@ -246,7 +254,7 @@ case, 0.013 on its window mean), which the window mean and Q absorb. A backend i
 passes under its tolerances on all 13 cases; the other-backend tolerances are not a licence for drift in the window
 means.
 
-### Compatibility quirks (GRAILS 0.2.1)
+### Compatibility quirks (GRAILS 0.2.x)
 
 Kept on purpose, because changing them would change scores:
 
@@ -366,8 +374,8 @@ it at normal priority.
 
 ## How well GRAIL agrees with viewers
 
-*GRAILS model 0.2.1 (the lab's v2.1), nested held-out evaluation of 2026-10-12. Cite as: GRAILS 0.2.1 (2026-10-12),
-574 blind showings (616 with the line-art round), one reviewer, held out by film.*
+*GRAILS model 0.2.2 (the scores of 0.2.1, the lab's v2.1), nested held-out evaluation of 2026-10-12. Cite as: GRAILS
+0.2.2 (2026-10-12), 574 blind showings (616 with the line-art round), one reviewer, held out by film.*
 
 ### Dataset
 

@@ -1,6 +1,9 @@
 //! Standard-decoder seed view (PORT_SPEC.md section 10; evaluate.seed_view): reported separately, never folded into
 //! the score, uncalibrated. The table (seed_scores.npy, float32 [65536, 2]: badness, percentile 0 best .. 100 worst)
-//! is embedded.
+//! is embedded. Model 0.2.2: the table rates clumps, voids and blotches only (av1-grain-seed's rating without its
+//! "ident" repetition metric) and is height-independent (only seed 0 and a few flagged seeds, among them the two
+//! constant-chroma-template seeds 0xb524 / 0x49d8, are 100 in it); stripe degeneracy is checked here against the
+//! actual frame height. Template overlap (repetition) is reported under `info` only, summarised nowhere.
 use serde::Serialize;
 use std::sync::OnceLock;
 
@@ -52,8 +55,15 @@ pub struct SeedView {
     pub seed_bad_share: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seed_degenerate: Option<usize>,
+    /// informational only (0.2.2): repetition is not a defect, nothing summarises these
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub seed_overlap_share: Option<f64>,
+    pub info: Option<SeedInfo>,
+}
+
+#[derive(Clone, Debug, Serialize, Default)]
+pub struct SeedInfo {
+    /// share of frames whose luma template shares more than half its samples with one of the previous 3 frames'
+    pub template_overlap_share: f64,
 }
 
 fn round(x: f64, d: i32) -> f64 {
@@ -99,6 +109,32 @@ pub fn seed_view(seeds: &[Option<u32>], height: usize) -> SeedView {
         seed_pct_worst: Some(round(pct.iter().cloned().fold(f64::MIN, f64::max), 2)),
         seed_bad_share: Some(round(pct.iter().filter(|&&p| p > 90.0).count() as f64 / n, 3)),
         seed_degenerate: Some(fr.iter().filter(|&&s| stripe_degenerate(s, height)).count()),
-        seed_overlap_share: Some(round(over as f64 / n, 3)),
+        info: Some(SeedInfo { template_overlap_share: round(over as f64 / n, 3) }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn table_and_stripes() {
+        let t = table();
+        // flagged in the table: seed 0 and the constant-chroma-template seeds
+        for s in [0usize, 0xb524, 0x49d8] {
+            assert_eq!(t[s][1], 100.0, "seed {s:#x}");
+        }
+        assert!(t.iter().all(|r| r[1].is_finite() && (0.0..=100.0).contains(&r[1])));
+        // a seed that is stripe-degenerate at one frame height but not at a smaller one: the table rates it, the view
+        // marks it 100 only where the height reaches the stripe
+        let n = 40u32;                           // stripe 40 starts at row 1280
+        let s = (((n * 37 + 178) & 255) << 8) ^ ((n * 173 + 105) & 255);
+        assert!(!stripe_degenerate(s, 1080) && stripe_degenerate(s, 2160));
+        let v1080 = seed_view(&[Some(s)], 1080);
+        let v2160 = seed_view(&[Some(s)], 2160);
+        assert_eq!(v2160.seed_pct_mean, Some(100.0));
+        assert_eq!(v2160.seed_degenerate, Some(1));
+        assert_eq!(v1080.seed_degenerate, Some(0));
+        assert_eq!(v1080.seed_pct_mean, Some(round(t[s as usize][1] as f64, 2)));
     }
 }

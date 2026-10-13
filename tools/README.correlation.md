@@ -1,7 +1,7 @@
 ## How well GRAIL agrees with viewers
 
-*GRAILS model 0.2.1 (the lab's v2.1), nested held-out evaluation of 2026-10-12. Cite as: GRAILS 0.2.1 (2026-10-12),
-574 blind showings (616 with the line-art round), one reviewer, held out by film.*
+*GRAILS model 0.2.2 (the scores of 0.2.1, the lab's v2.1), nested held-out evaluation of 2026-10-12. Cite as: GRAILS
+0.2.2 (2026-10-12), 574 blind showings (616 with the line-art round), one reviewer, held out by film.*
 
 ### Dataset
 

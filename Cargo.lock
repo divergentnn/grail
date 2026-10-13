@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "grail"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -142,7 +142,7 @@ dependencies = [
 
 [[package]]
 name = "grail-gpu"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "grail-stages",
@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "grail-metal"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "grail-stages",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "grail-stages"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
 ]

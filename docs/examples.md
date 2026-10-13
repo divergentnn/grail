@@ -2,7 +2,7 @@
 
 Scenes from the blind tests GRAILS was calibrated on. Each image shows the same frame and spot of every version,
 enlarged without smoothing so the grain stays visible. Unless a section says otherwise, the scores are this tool's
-(full mode, GRAILS model 0.2.1) for exactly the frames and window the viewer judged, a 3.3-second clip, and "viewer"
+(full mode, GRAILS model 0.2.2) for exactly the frames and window the viewer judged, a 3.3-second clip, and "viewer"
 is the verdict the viewer gave each encode, blind, against the source; bitrates are the video stream's. For each
 metric, a green ✓ marks its score for the encode it rightly prefers (the one the viewer passed), and a red ✗ its
 score for the encode it wrongly prefers. `tools/make_examples.py` regenerates the images and the numbers
@@ -116,17 +116,17 @@ worst-rated last, with an earlier seed pick second and the encoder's own seeds t
 GRAILS scores the grain the encode describes, drawn over the whole frame, and keeps the standard-decoder seed rating
 out of the score. Full-frame grain is random too, so the score can still move very slightly with the seeds: 98.65,
 98.64 and 98.67 here. Its separate **standard-decoder seed view** rates each frame's seed for the clumps and holes
-of its grain patch (and flags seeds that make striped patches), from 0 (best) to 100 (worst). It is uncalibrated and
-never part of the score; on the blind seed tests, with the seed table in this release (model 0.2.1) it put 14 of 15
-judged pairs of versions in the viewer's order. This release's table also counts how much a seed's patch repeats;
-the next release (0.2.2) drops that, since the viewer minds clumps and holes, not repetition, and its table orders
-12 of the 15 pairs correctly.
+of its grain patch (and flags seeds that make striped patches at the encode's frame height), from 0 (best) to 100
+(worst). It is uncalibrated and never part of the score. Since model 0.2.2 its table rates clumps, holes and blotches
+only, not how much a seed's patch repeats (the viewer minds clumps and holes, not repetition; model 0.2.1's table
+counted repetition too); on the blind seed tests it puts 12 of the 15 judged pairs of versions in the viewer's order
+(0.2.1's table: 14 of 15).
 
 | Black Swan (2010), whole scene, 240 frames | SSIMULACRA2 | GRAILS | seed view (mean) | frames with a seed in the worst tenth |
 |---|---|---|---|---|
-| A: worst-rated seeds | 0.9 | 98.7 | 77 | 32 % |
+| A: worst-rated seeds | 0.9 | 98.7 | 77 | 44 % |
 | the encoder's own seeds | 0.9 | 98.7 | 51 | 12 % |
-| B: best-rated seeds | 1.0 | 98.6 | 27 | 0 % |
+| B: best-rated seeds | 1.0 | 98.6 | 30 | 0 % |
 
 Plain SSIMULACRA2 gives all three about 1: against grain this heavy, new random grain never matches the source's
 pixel for pixel. The scores here are for the whole scene against its source; the blind test was an ordering, not

@@ -15,8 +15,8 @@
   ],
   "zoom": 2,
   "window_frames": 79,
-  "model_version": "0.2.1",
-  "tool_version": "0.1.0-beta.1",
+  "model_version": "0.2.2",
+  "tool_version": "0.1.0-beta.2",
   "mode": "full",
   "encodes": [
    {
@@ -96,8 +96,8 @@
   ],
   "zoom": 3,
   "window_frames": 79,
-  "model_version": "0.2.1",
-  "tool_version": "0.1.0-beta.1",
+  "model_version": "0.2.2",
+  "tool_version": "0.1.0-beta.2",
   "mode": "full",
   "encodes": [
    {
@@ -171,8 +171,8 @@
   ],
   "zoom": 3,
   "window_frames": 79,
-  "model_version": "0.2.1",
-  "tool_version": "0.1.0-beta.1",
+  "model_version": "0.2.2",
+  "tool_version": "0.1.0-beta.2",
   "mode": "full",
   "encodes": [
    {
@@ -230,8 +230,8 @@
   "zoom": 2,
   "grain_gain": 6,
   "viewer_ordering": "best > v1-best > default > worst",
-  "model_version": "0.2.1",
-  "tool_version": "0.1.0-beta.1",
+  "model_version": "0.2.2",
+  "tool_version": "0.1.0-beta.2",
   "mode": "full",
   "versions": [
    {
@@ -242,10 +242,10 @@
     "frames_scored": 240,
     "seed_view": {
      "seed_frames": 240,
-     "seed_pct_mean": 77.0,
-     "seed_pct_p90": 96.73,
-     "seed_pct_worst": 98.76,
-     "seed_bad_share": 0.321,
+     "seed_pct_mean": 76.6,
+     "seed_pct_p90": 97.38,
+     "seed_pct_worst": 99.17,
+     "seed_bad_share": 0.438,
      "seed_degenerate": 0
     }
    },
@@ -257,9 +257,9 @@
     "frames_scored": 240,
     "seed_view": {
      "seed_frames": 240,
-     "seed_pct_mean": 27.22,
-     "seed_pct_p90": 68.7,
-     "seed_pct_worst": 68.7,
+     "seed_pct_mean": 29.63,
+     "seed_pct_p90": 74.37,
+     "seed_pct_worst": 74.37,
      "seed_bad_share": 0.0,
      "seed_degenerate": 0
     }
@@ -272,10 +272,10 @@
     "frames_scored": 240,
     "seed_view": {
      "seed_frames": 240,
-     "seed_pct_mean": 51.27,
-     "seed_pct_p90": 92.77,
-     "seed_pct_worst": 99.93,
-     "seed_bad_share": 0.121,
+     "seed_pct_mean": 51.49,
+     "seed_pct_p90": 92.13,
+     "seed_pct_worst": 99.96,
+     "seed_bad_share": 0.117,
      "seed_degenerate": 0
     }
    }
@@ -285,25 +285,25 @@
    "frames": 36,
    "fps": "24000/1001",
    "crf": 6,
-   "bytes": 2277142,
-   "ssimulacra2_min": 92.25,
-   "ssimulacra2_mean": 92.97,
+   "bytes": 2279987,
+   "ssimulacra2_min": 92.42,
+   "ssimulacra2_mean": 92.99,
    "tried": [
     [
      2,
-     4460334,
+     4462448,
      null
     ],
     [
      4,
-     3009833,
+     3011483,
      null
     ],
     [
      6,
-     2277142,
-     92.25,
-     1
+     2279987,
+     92.42,
+     31
     ]
    ],
    "first_frame": 40
@@ -312,8 +312,8 @@
  "clean": {
   "film": "1917 (2019)",
   "window_frames": 79,
-  "model_version": "0.2.1",
-  "tool_version": "0.1.0-beta.1",
+  "model_version": "0.2.2",
+  "tool_version": "0.1.0-beta.2",
   "mode": "full",
   "encodes": [
    {
@@ -394,8 +394,8 @@
   ],
   "zoom": 2,
   "window_frames": 79,
-  "model_version": "0.2.1",
-  "tool_version": "0.1.0-beta.1",
+  "model_version": "0.2.2",
+  "tool_version": "0.1.0-beta.2",
   "mode": "full",
   "encodes": [
    {

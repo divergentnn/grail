@@ -278,17 +278,19 @@ pub fn run(file: &Path, only: Option<&str>, fg: Option<PathBuf>, threads: usize,
                 pen.insert(t.clone(), json!({"ref": v, "port": m}));
             }
         }
+        // the standard-decoder seed view: the summarised fields and info.template_overlap_share (0.2.2 layout);
+        // info.exact_pct_mean_stock_tool (the stock av1-grain-seed's own rating) is the reference's only: not compared
         let seed_ok = {
             let sv = serde_json::to_value(&r.std_decoder)?;
-            // the reference's later port_reference.json keeps the overlap share under info.template_overlap_share
-            let mut rv = c["seed_view"].clone();
-            if rv.get("seed_overlap_share").is_none() {
-                if let Some(x) = rv.get("info").and_then(|i| i.get("template_overlap_share")).cloned() {
-                    rv["seed_overlap_share"] = x;
+            let rv = &c["seed_view"];
+            let get = |v: &Value, k: &str| -> Option<Value> {
+                match k.strip_prefix("info.") {
+                    Some(sub) => v.get("info").and_then(|i| i.get(sub)).cloned(),
+                    None => v.get(k).cloned(),
                 }
-            }
+            };
             ["seed_frames", "seed_pct_mean", "seed_pct_p90", "seed_pct_worst", "seed_bad_share", "seed_degenerate",
-             "seed_overlap_share"].iter().all(|k| match (sv.get(*k), rv.get(*k)) {
+             "info.template_overlap_share"].iter().all(|k| match (get(&sv, k), get(rv, k)) {
                 (Some(a), Some(b)) => match (a.as_f64(), b.as_f64()) {
                     (Some(x), Some(y)) => (x - y).abs() < 1e-6,
                     _ => false,

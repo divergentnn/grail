@@ -121,7 +121,7 @@ target/release/grail denoise in.y4m out.y4m     # the measurement denoiser, 10-b
 - `crates/grail-stages`: stage interfaces (for other backends).
 - `crates/grail-gpu`: driver layer (CUDA driver API / HIP, loaded at run time), denoiser, features, line art.
 - `crates/grail-metal`: the same stages on Metal (macOS); kernels in `kernels/metal/` (MSL ports of the CUDA files).
-- `crates/grail`: CLI, decoding (ffmpeg), libvship binding, the GRAILS model 0.2.1 (`data/weights.json`), seed view
+- `crates/grail`: CLI, decoding (ffmpeg), libvship binding, the GRAILS model 0.2.2 (`data/weights.json`), seed view
   (`data/seed_scores.npy`), reference checks.
 - `tools/`: lab tools (whole-set case file, benchmark; `bench_macos.py`, `build_libvship_macos.sh` for macOS).
 
