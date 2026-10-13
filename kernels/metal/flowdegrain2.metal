@@ -72,29 +72,30 @@ kernel void down(constant DownArgs& P [[buffer(0)]], KARGS) {
  int w=W/2,h=H/2,i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=w*h)return;
  int p=(i/w*2)*W+(i%w*2);b[i]=(a[p]+a[p+1]+a[p+W]+a[p+W+1])*.25f;
 }
-// warp shuffle-down tree (lanes 16, 8, 4, 2, 1), then the two warps of the 64-thread block
-static inline float reduce(float x,threadgroup float* sm,uint t) {
- for(ushort d=16;d;d/=2)x+=simd_shuffle_down(x,d);
- if(!(t&31))sm[t/32]=x;SYNC();float s=sm[0]+sm[1];SYNC();return s;
-}
 // GPU row-sweep inverse search: spatial propagation without inter-block races.
 // Opposite sweep uses the prior completed pass for vertical candidates.
-struct RasterArgs { cfp C; cfp N; int W, H; cfp pred; int PW, PH; cfp prev; fp out; int BW, BH, reverse, iterations; };
+// Metal: one SIMD group per 8x8 patch, each lane holding two pixels (rows r and r + 4), so every patch sum is one
+// hardware SIMD reduction without threadgroup barriers (CUDA: 64 threads, shuffle tree per warp, then the two warps;
+// another summation order). The neighbours' levels come as pointers (ns[d]) instead of one copied stack.
+static inline float R(float a,float b) { return simd_sum(a+b); }
+struct RasterArgs { cfp C; cfp ns[6]; int W, H; cfp pred; int PW, PH; cfp prev; fp out; int BW, BH, reverse, iterations; };
 kernel void raster(constant RasterArgs& P [[buffer(0)]], KARGS) {
- cfp C=P.C,N=P.N,pred=P.pred,prev=P.prev; fp out=P.out;
+ cfp C=P.C,pred=P.pred,prev=P.prev; fp out=P.out;
  const int W=P.W,H=P.H,PW=P.PW,PH=P.PH,BW=P.BW,BH=P.BH,reverse=P.reverse,iterations=P.iterations;
- int by=blockIdx.x,t=threadIdx.x,d=blockIdx.y;threadgroup float sm[2];
- N+=d*W*H;out+=d*2*BW*BH;
+ int by=blockIdx.x,t=threadIdx.x,d=blockIdx.y;
+ cfp N=P.ns[d];out+=d*2*BW*BH;
  if(pred)pred+=d*2*PW*PH;if(prev)prev+=d*2*BW*BH;
  float lastu=0,lastv=0;
  for(int col=0;col<BW;col++){
- int bx=reverse?BW-1-col:col,px=bx*4+t%8,py=by*4+t/8;
- float c=at(C,px,py,W,H),gx=0,gy=0;
+ int bx=reverse?BW-1-col:col,px=bx*4+t%8,py0=by*4+t/8,py1=py0+4;
+ float c0=at(C,px,py0,W,H),c1=at(C,px,py1,W,H),gx0=0,gy0=0,gx1=0,gy1=0;
  for(int j=-1;j<=1;j++){float k=j==0?2.f:1.f;
- gx+=k*(at(C,px+1,py+j,W,H)-at(C,px-1,py+j,W,H));
- gy+=k*(at(C,px+j,py+1,W,H)-at(C,px+j,py-1,W,H));}
- float aa=reduce(gx*gx,sm,t),bb=reduce(gy*gy,sm,t),ab=reduce(gx*gy,sm,t);
- float gm=reduce(gx,sm,t)/64,hm=reduce(gy,sm,t)/64;
+ gx0+=k*(at(C,px+1,py0+j,W,H)-at(C,px-1,py0+j,W,H));
+ gy0+=k*(at(C,px+j,py0+1,W,H)-at(C,px+j,py0-1,W,H));
+ gx1+=k*(at(C,px+1,py1+j,W,H)-at(C,px-1,py1+j,W,H));
+ gy1+=k*(at(C,px+j,py1+1,W,H)-at(C,px+j,py1-1,W,H));}
+ float aa=R(gx0*gx0,gx1*gx1),bb=R(gy0*gy0,gy1*gy1),ab=R(gx0*gy0,gx1*gy1);
+ float gm=R(gx0,gx1)/64,hm=R(gy0,gy1)/64;
  float u=0,v=0;
  if(prev){u=prev[by*BW+bx];v=prev[BW*BH+by*BW+bx];}
  else if(pred){float xx=(bx*4+4+.5f)/2-.5f,yy=(by*4+4+.5f)/2-.5f;
@@ -104,13 +105,13 @@ kernel void raster(constant RasterArgs& P [[buffer(0)]], KARGS) {
  float cu=u,cv=v;
  if(k==1){if(col==0)continue;cu=lastu;cv=lastv;}
  if(k==2){if(!prev||by+1>=BH)continue;cu=prev[(by+1)*BW+bx];cv=prev[BW*BH+(by+1)*BW+bx];}
- float d=bil(N,px+cu,py+cv,W,H)-c,ds=reduce(d,sm,t),ss=reduce(d*d,sm,t)-ds*ds/64;
+ float d0=bil(N,px+cu,py0+cv,W,H)-c0,d1=bil(N,px+cu,py1+cv,W,H)-c1,ds=R(d0,d1),ss=R(d0*d0,d1*d1)-ds*ds/64;
  if(ss<best){best=ss;bu=cu;bv=cv;}
  }
  u=bu;v=bv;float det=fmax(aa*bb-ab*ab,.001f),prior=1e30f;
  for(int it=0;it<iterations;it++){
- float d=bil(N,px+u,py+v,W,H)-c,ds=reduce(d,sm,t),ss=reduce(d*d,sm,t)-ds*ds/64;
- float ax=reduce(d*gx,sm,t)-ds*gm,ay=reduce(d*gy,sm,t)-ds*hm;
+ float d0=bil(N,px+u,py0+v,W,H)-c0,d1=bil(N,px+u,py1+v,W,H)-c1,ds=R(d0,d1),ss=R(d0*d0,d1*d1)-ds*ds/64;
+ float ax=R(d0*gx0,d1*gx1)-ds*gm,ay=R(d0*gy0,d1*gy1)-ds*hm;
  u-=(bb*ax-ab*ay)/det;v-=(aa*ay-ab*ax)/det;
  if(ss>=prior)break;prior=ss;
  }
@@ -119,11 +120,11 @@ kernel void raster(constant RasterArgs& P [[buffer(0)]], KARGS) {
  if(t==0){out[by*BW+bx]=u;out[BW*BH+by*BW+bx]=v;}
  }
 }
-struct DenseArgs { cfp C; cfp N; cfp mv; fp f; int W, H, BW, BH; };
+struct DenseArgs { cfp C; cfp ns[6]; cfp mv; fp f; int W, H, BW, BH; };
 kernel void dense(constant DenseArgs& P [[buffer(0)]], KARGS) {
- cfp C=P.C,N=P.N,mv=P.mv; fp f=P.f; const int W=P.W,H=P.H,BW=P.BW,BH=P.BH;
+ cfp C=P.C,N=P.ns[blockIdx.y],mv=P.mv; fp f=P.f; const int W=P.W,H=P.H,BW=P.BW,BH=P.BH;
  int i=blockIdx.x*blockDim.x+threadIdx.x;if(i>=W*H)return;int x=i%W,y=i/W;
- N+=blockIdx.y*W*H;mv+=blockIdx.y*2*BW*BH;f+=blockIdx.y*2*W*H;
+ mv+=blockIdx.y*2*BW*BH;f+=blockIdx.y*2*W*H;
  float sx=0,sy=0,sw=0;
  // DIS-style photometric densification over patches covering this pixel.
  for(int by=imin(BH-1,imax(0,(y-7+3)/4));by<=imin(BH-1,y/4);by++)for(int bx=imin(BW-1,imax(0,(x-7+3)/4));bx<=imin(BW-1,x/4);bx++){

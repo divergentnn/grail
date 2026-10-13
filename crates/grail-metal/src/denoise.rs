@@ -195,10 +195,9 @@ impl Engine {
         for level in (self.p.finest..self.p.levels).rev() {
             let (cbuf, w, h) = (&cur.levels[level].0, cur.levels[level].1, cur.levels[level].2);
             let c = cbuf.ptr;
-            let stack = self.buf("r_stack", d * w * h * 4)?;
-            for (j, nb) in nbrs.iter().enumerate() {
-                crate::driver::gpu().dtod(stack + (j * w * h * 4) as u64, nb.levels[level].0.ptr, w * h * 4)?;
-            }
+            // the neighbours' levels by pointer (the CUDA version copies them into one stack)
+            assert!(d <= 6, "at most 6 neighbours");
+            let ns: Vec<u64> = (0..6).map(|j| nbrs.get(j).map(|nb| nb.levels[level].0.ptr).unwrap_or(0)).collect();
             let bw = 1.max(1 + (w as i64 - 8).div_euclid(4)) as usize;
             let bh = 1.max(1 + (h as i64 - 8).div_euclid(4)) as usize;
             let fwd = self.buf("r_fwd", d * 2 * bw * bh * 4)?;
@@ -206,16 +205,20 @@ impl Engine {
             let (pp, pw, ph) = pred.unwrap_or((0, 0, 0));
             let it = self.p.iterations / 2;
             let grid = (bh as u32, d as u32, 1);
-            launch("raster", grid, (64, 1, 1), 0,
-                   args![c, stack, w as i32, h as i32, pp, pw as i32, ph as i32, 0u64, fwd, bw as i32, bh as i32, 0i32, it])?;
-            launch("raster", grid, (64, 1, 1), 0,
-                   args![c, stack, w as i32, h as i32, pp, pw as i32, ph as i32, fwd, back, bw as i32, bh as i32, 1i32, it])?;
+            let n6 = [ns[0], ns[1], ns[2], ns[3], ns[4], ns[5]];
+            // one SIMD group (32 lanes, two pixels each) per patch row
+            launch("raster", grid, (32, 1, 1), 0,
+                   args![c, n6[0], n6[1], n6[2], n6[3], n6[4], n6[5], w as i32, h as i32, pp, pw as i32, ph as i32, 0u64, fwd,
+                         bw as i32, bh as i32, 0i32, it])?;
+            launch("raster", grid, (32, 1, 1), 0,
+                   args![c, n6[0], n6[1], n6[2], n6[3], n6[4], n6[5], w as i32, h as i32, pp, pw as i32, ph as i32, fwd, back,
+                         bw as i32, bh as i32, 1i32, it])?;
             // ping-pong between two dense buffers: the next level reads `pred` while writing the other
             let name = if flip { "r_pred_a" } else { "r_pred_b" };
             flip = !flip;
             let np = self.buf(name, d * 2 * w * h * 4)?;
             launch("dense", ((w * h).div_ceil(256) as u32, d as u32, 1), (256, 1, 1), 0,
-                   args![c, stack, back, np, w as i32, h as i32, bw as i32, bh as i32])?;
+                   args![c, n6[0], n6[1], n6[2], n6[3], n6[4], n6[5], back, np, w as i32, h as i32, bw as i32, bh as i32])?;
             pred = Some((np, w, h));
         }
         Ok(pred.unwrap())

@@ -4,6 +4,11 @@ use crate::args;
 use crate::buf::{launch, launch_n, launch_reduce, reduce_blocks, DBuf};
 use anyhow::Result;
 
+/// largest radius of the tiled correlation kernels (corr_x / corr_y)
+const CORR_RMAX: i32 = 32;
+/// outputs per thread of the tiled correlation kernels (CK in grail.metal)
+const CORR_K: usize = 8;
+
 /// a 1-D correlation kernel on the device (weights w[0 .. 2r])
 pub struct Kern {
     pub buf: DBuf,
@@ -34,6 +39,15 @@ impl Kern {
 pub fn corr2(src: u64, dst: u64, tmp: u64, w: usize, h: usize, planes: usize, kv: &Kern, kh: &Kern, double: bool)
              -> Result<()> {
     let n = (w * h * planes) as i64;
+    if kv.r <= CORR_RMAX && kh.r <= CORR_RMAX {
+        // tiled kernels (same sums, same order)
+        let sfx = if double { "d" } else { "f" };
+        let (wi, hi) = (w as i32, h as i32);
+        launch(&format!("corr_y_{sfx}"), (w.div_ceil(32) as u32, h.div_ceil(8 * CORR_K) as u32, planes as u32), (32, 8, 1),
+               0, args![src, tmp, wi, hi, &kv.buf, kv.r])?;
+        return launch(&format!("corr_x_{sfx}"), (w.div_ceil(256 * CORR_K) as u32, h as u32, planes as u32), (256, 1, 1), 0,
+                      args![tmp, dst, wi, hi, &kh.buf, kh.r]);
+    }
     let name = if double { "corr_d" } else { "corr_f" };
     launch_n(name, n as usize, args![src, tmp, w as i32, h as i32, n, &kv.buf, kv.r, 0i32])?;
     launch_n(name, n as usize, args![tmp, dst, w as i32, h as i32, n, &kh.buf, kh.r, 1i32])

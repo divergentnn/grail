@@ -47,6 +47,8 @@ pub struct Metal {
     pub device_name: String,
     /// GRAIL_METAL_PROFILE=1: every launch in its own command buffer, GPU time per kernel (name -> launches, seconds)
     profile: Option<Mutex<HashMap<String, (usize, f64)>>>,
+    /// GRAIL_METAL_PROFILE=host: launches, encode time, waits, wait time (ns)
+    host: Option<[std::sync::atomic::AtomicU64; 4]>,
 }
 
 // Metal devices, queues, pipelines and buffers are thread-safe; the encoder state is behind a mutex.
@@ -100,6 +102,7 @@ impl Metal {
             stream: Mutex::new(Stream { cb: None, enc: None, launches: 0, inflight: vec![], staging: vec![] }),
             device_name,
             profile: std::env::var("GRAIL_METAL_PROFILE").ok().filter(|v| v == "1").map(|_| Mutex::new(HashMap::new())),
+            host: std::env::var("GRAIL_METAL_PROFILE").ok().filter(|v| v == "host").map(|_| Default::default()),
         })
     }
 
@@ -166,6 +169,17 @@ impl Metal {
     }
 
     fn wait(&self, s: &mut Stream) -> Result<()> {
+        let t0 = std::time::Instant::now();
+        let r = self.wait_inner(s);
+        if let Some(h) = &self.host {
+            use std::sync::atomic::Ordering::Relaxed;
+            h[2].fetch_add(1, Relaxed);
+            h[3].fetch_add(t0.elapsed().as_nanos() as u64, Relaxed);
+        }
+        r
+    }
+
+    fn wait_inner(&self, s: &mut Stream) -> Result<()> {
         self.commit(s);
         let mut err = None;
         for cb in s.inflight.drain(..) {
@@ -190,6 +204,7 @@ impl Metal {
     /// launch a kernel: grid of blocks, block of threads, arguments packed as the kernel's argument struct
     pub fn launch_raw(&self, name: &str, grid: (u32, u32, u32), block: (u32, u32, u32), args: &[u8], ptrs: &[u64])
                       -> Result<()> {
+        let t0 = std::time::Instant::now();
         let pipe = self.pipes.get(name).ok_or_else(|| anyhow!("Metal: no kernel {name}"))?;
         let mut used: Vec<Buf> = Vec::with_capacity(ptrs.len());
         for &p in ptrs {
@@ -223,11 +238,22 @@ impl Metal {
         } else if s.launches >= BATCH {
             self.commit(&mut s);
         }
+        if let Some(h) = &self.host {
+            use std::sync::atomic::Ordering::Relaxed;
+            h[0].fetch_add(1, Relaxed);
+            h[1].fetch_add(t0.elapsed().as_nanos() as u64, Relaxed);
+        }
         Ok(())
     }
 
     /// GRAIL_METAL_PROFILE=1: GPU time per kernel so far, most expensive first
     pub fn profile_report(&self) -> Option<String> {
+        if let Some(h) = &self.host {
+            use std::sync::atomic::Ordering::Relaxed;
+            let v: Vec<u64> = h.iter().map(|x| x.load(Relaxed)).collect();
+            return Some(format!("Metal host: {} launches, encoding {:.3} s; {} waits, waiting {:.3} s", v[0],
+                                v[1] as f64 * 1e-9, v[2], v[3] as f64 * 1e-9));
+        }
         let m = self.profile.as_ref()?.lock().unwrap();
         let mut v: Vec<_> = m.iter().collect();
         v.sort_by(|a, b| b.1 .1.partial_cmp(&a.1 .1).unwrap());

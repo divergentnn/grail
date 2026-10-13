@@ -15,9 +15,10 @@ using namespace metal;
               uint3 blockDim [[threads_per_threadgroup]], uint3 gridDim [[threadgroups_per_grid]], \
               uint lane [[thread_index_in_simdgroup]], uint sg [[simdgroup_index_in_threadgroup]]
 #define SYNC() threadgroup_barrier(mem_flags::mem_threadgroup)
+// 32-bit element index (every buffer here has fewer than 2^32 elements; 64-bit division is slow on the GPU)
 #define IDX                                                     \
-    long i = (long)blockIdx.x * blockDim.x + threadIdx.x;       \
-    if (i >= n) return;
+    uint i = blockIdx.x * blockDim.x + threadIdx.x;             \
+    if (i >= (ulong)n) return;
 typedef device const float* cfp;
 typedef device float* fp;
 typedef device const uchar* cbp;
@@ -44,14 +45,14 @@ struct CutArgs { device const short* den; int aw, ah; device const ushort* orig;
 kernel void cut_window(constant CutArgs& P [[buffer(0)]], KARGS) {
     const int aw = P.aw, ah = P.ah, x = P.x, y = P.y, w = P.w, h = P.h, ax = P.ax, ay = P.ay;
     long n = (long)w * h * 3 / 2;
-    IDX long ny = (long)w * h, nc = (long)(w / 2) * (h / 2);
+    IDX uint ny = (uint)w * h, nc = (uint)(w / 2) * (h / 2);
     int k, pw, wx, wy;
     long dbase;
     if (i < ny) {
-        k = 1; pw = w; wx = (int)(i % w); wy = (int)(i / w); dbase = 0;
+        k = 1; pw = w; wx = (int)(i % (uint)w); wy = (int)(i / (uint)w); dbase = 0;
     } else {
-        long j = i - ny; int p = (int)(j / nc); j -= p * nc;
-        k = 2; pw = w / 2; wx = (int)(j % pw); wy = (int)(j / pw);
+        uint j = i - ny; int p = (int)(j / nc); j -= p * nc;
+        k = 2; pw = w / 2; wx = (int)(j % (uint)pw); wy = (int)(j / (uint)pw);
         dbase = (long)aw * ah + (long)p * (aw / 2) * (ah / 2);
     }
     int X = x / k + wx - ax / k, Y = y / k + wy - ay / k, AW = aw / k, AH = ah / k;
@@ -71,7 +72,7 @@ kernel void ew_sqr(constant EW1& P [[buffer(0)]], KARGS) { long n = P.n; IDX P.c
 kernel void ew_abs(constant EW1& P [[buffer(0)]], KARGS) { long n = P.n; IDX P.c[i] = fabs(P.a[i]); }
 // c = a / b[i % m]
 struct DivArgs { cfp a; cfp b; fp c; long n; long m; };
-kernel void ew_div_bc(constant DivArgs& P [[buffer(0)]], KARGS) { long n = P.n; IDX P.c[i] = P.a[i] / P.b[i % P.m]; }
+kernel void ew_div_bc(constant DivArgs& P [[buffer(0)]], KARGS) { long n = P.n; IDX P.c[i] = P.a[i] / P.b[i % (uint)P.m]; }
 // motion pyramid base: clip(rint(g / 4), 0, 255)
 kernel void ew_q8(constant EW1& P [[buffer(0)]], KARGS) {
     long n = P.n; IDX float v = rint(P.a[i] / 4.f); P.c[i] = v < 0.f ? 0.f : (v > 255.f ? 255.f : v);
@@ -80,7 +81,7 @@ kernel void ew_rint(constant EW1& P [[buffer(0)]], KARGS) { long n = P.n; IDX P.
 // GUIDE: v = max(m2 - m m, 0); a = v / (v + eps); b = m - a m   (eps per plane: eps[i / ps])
 struct GuideArgs { cfp m; cfp m2; cfp eps; fp a; fp b; long n; long ps; };
 kernel void ew_guide(constant GuideArgs& P [[buffer(0)]], KARGS) {
-    long n = P.n; IDX float e = P.eps[i / P.ps], mm = P.m[i];
+    long n = P.n; IDX float e = P.eps[i / (uint)P.ps], mm = P.m[i];
     float v = fmax(P.m2[i] - mm * mm, 0.f);
     float aa = v / (v + e);
     P.a[i] = aa; P.b[i] = mm - aa * mm;
@@ -94,7 +95,7 @@ kernel void ew_alpha(constant AlphaArgs& P [[buffer(0)]], KARGS) {
 // BLEND: y = x + a (ga x + gb - x), alpha broadcast (a[i % am])
 struct BlendArgs { cfp x; cfp a; cfp ga; cfp gb; fp y; long n; long am; };
 kernel void ew_blend(constant BlendArgs& P [[buffer(0)]], KARGS) {
-    long n = P.n; IDX float xx = P.x[i]; P.y[i] = xx + P.a[i % P.am] * (P.ga[i] * xx + P.gb[i] - xx);
+    long n = P.n; IDX float xx = P.x[i]; P.y[i] = xx + P.a[i % (uint)P.am] * (P.ga[i] * xx + P.gb[i] - xx);
 }
 // FINISH (detail gate) -> 10-bit luma
 struct FinishArgs { cfp y_; cfp lo_; cfp hc_; cfp hs_; cfp ha_; cfp sq_; cfp ws_; cfp e_; cfp efp; float c0, boost;
@@ -129,7 +130,7 @@ static inline float fkey_inv(uint k) {
 struct GatherArgs { cfp x; fp out; long ps; long stride; long m; int planes, absv; };
 kernel void gather_stride(constant GatherArgs& P [[buffer(0)]], KARGS) {
     long n = P.m * P.planes;
-    IDX long p = i / P.m, j = i % P.m;
+    IDX uint m = (uint)P.m, p = i / m, j = i % m;
     float v = P.x[p * P.ps + j * P.stride];
     P.out[i] = P.absv ? fabs(v) : v;
 }
@@ -227,6 +228,69 @@ kernel void corr_d(constant CorrArgs& P [[buffer(0)]], KARGS) {
     }
     P.b[i] = hi + lo;
 }
+// The same correlations, tiled through threadgroup memory on a 2-D grid (no index division), r <= CORR_RMAX. Each
+// thread computes CK consecutive outputs from one sliding window of the tile; every output still sums its taps
+// in the order j = -r .. r, so the results are those of corr_f / corr_d.
+#define CORR_RMAX 32
+#define CK 8
+struct CorrTArgs { cfp a; fp b; int W, H; cfp wt; int r; };
+template <bool D> static inline void corr_run(threadgroup const float* s, int stride, threadgroup const float* wt, int r,
+                                              thread float* hi, thread float* lo) {
+    for (int k = 0; k < CK; k++) { hi[k] = 0.f; lo[k] = 0.f; }
+    for (int m = 0; m < CK + 2 * r; m++) {
+        float v = s[m * stride];
+        #pragma unroll
+        for (int k = 0; k < CK; k++) {
+            int j = m - k;                       // tap index + r of output k
+            if (j >= 0 && j <= 2 * r) {
+                if (D) two_add(hi[k], lo[k], mul_rn(v, wt[j]));
+                else hi[k] += v * wt[j];
+            }
+        }
+    }
+}
+// along x (axis 1): 256 * CK outputs of one row per threadgroup of 256; grid (ceil(W / (256 CK)), H, planes)
+template <bool D> kernel void corr_x(constant CorrTArgs& P [[buffer(0)]], KARGS) {
+    threadgroup float s[256 * CK + 2 * CORR_RMAX];
+    threadgroup float wt[2 * CORR_RMAX + 1];
+    const int W = P.W, H = P.H, r = P.r;
+    const int x0 = blockIdx.x * 256 * CK, y = blockIdx.y;
+    cfp row = P.a + ((long)blockIdx.z * H + y) * W;
+    for (int j = threadIdx.x; j < 256 * CK + 2 * r; j += 256) s[j] = row[reflect_idx(x0 - r + j, W)];
+    for (int j = threadIdx.x; j <= 2 * r; j += 256) wt[j] = P.wt[j];
+    SYNC();
+    float hi[CK], lo[CK];
+    corr_run<D>(s + threadIdx.x * CK, 1, wt, r, hi, lo);
+    fp out = P.b + ((long)blockIdx.z * H + y) * W;
+    for (int k = 0; k < CK; k++) {
+        int x = x0 + threadIdx.x * CK + k;
+        if (x < W) out[x] = D ? hi[k] + lo[k] : hi[k];
+    }
+}
+// along y (axis 0): a 32 x (8 CK) tile per threadgroup of 32 x 8 threads, CK consecutive rows each; grid
+// (ceil(W / 32), ceil(H / (8 CK)), planes)
+template <bool D> kernel void corr_y(constant CorrTArgs& P [[buffer(0)]], KARGS) {
+    threadgroup float s[(8 * CK + 2 * CORR_RMAX) * 32];
+    threadgroup float wt[2 * CORR_RMAX + 1];
+    const int W = P.W, H = P.H, r = P.r;
+    const int x = blockIdx.x * 32 + threadIdx.x, y0 = blockIdx.y * 8 * CK;
+    cfp pl = P.a + (long)blockIdx.z * H * W;
+    const int xc = min(x, W - 1);
+    for (int j = threadIdx.y; j < 8 * CK + 2 * r; j += 8) s[j * 32 + threadIdx.x] = pl[(long)reflect_idx(y0 - r + j, H) * W + xc];
+    for (int j = threadIdx.y * 32 + threadIdx.x; j <= 2 * r; j += 256) wt[j] = P.wt[j];
+    SYNC();
+    if (x >= W) return;
+    float hi[CK], lo[CK];
+    corr_run<D>(s + threadIdx.y * CK * 32 + threadIdx.x, 32, wt, r, hi, lo);
+    for (int k = 0; k < CK; k++) {
+        int y = y0 + threadIdx.y * CK + k;
+        if (y < H) P.b[(long)blockIdx.z * H * W + (long)y * W + x] = D ? hi[k] + lo[k] : hi[k];
+    }
+}
+template [[host_name("corr_x_f")]] kernel void corr_x<false>(constant CorrTArgs&, uint3, uint3, uint3, uint3, uint, uint);
+template [[host_name("corr_x_d")]] kernel void corr_x<true>(constant CorrTArgs&, uint3, uint3, uint3, uint3, uint, uint);
+template [[host_name("corr_y_f")]] kernel void corr_y<false>(constant CorrTArgs&, uint3, uint3, uint3, uint3, uint, uint);
+template [[host_name("corr_y_d")]] kernel void corr_y<true>(constant CorrTArgs&, uint3, uint3, uint3, uint3, uint, uint);
 // grey dilation / erosion with a square footprint along one axis
 struct MinMaxArgs { cfp a; fp b; int W, H, r, axis, is_max; };
 kernel void minmax1d(constant MinMaxArgs& P [[buffer(0)]], KARGS) {
