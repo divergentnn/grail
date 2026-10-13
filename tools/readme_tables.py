@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Lab tool: fills the README's exactness / whole-set / speed placeholders from the check and bench results.
+"""Lab tool: fills docs/technical.md's exactness / whole-set / speed placeholders from the check and bench results.
 
-    readme_tables.py tools/README.template.md tools/README.correlation.md results/ README.md
+    readme_tables.py tools/technical.template.md tools/README.correlation.md results/ docs/technical.md
 (README.correlation.md: the lab's README_GRAIL_section.md, the two validation rounds labelled by film)
 """
 import json
