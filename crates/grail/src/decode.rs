@@ -48,7 +48,9 @@ pub fn probe(path: &Path) -> Result<Probe> {
     Ok(p)
 }
 
-/// AV1 sequence header flag film_grain_params_present (trace_headers on the first packet, no decoding)
+/// AV1 sequence header flag film_grain_params_present (trace_headers on the first packet, no decoding). Any sequence
+/// header with the flag set counts: trace_headers also prints the container's copy (Matroska CodecPrivate / av1C),
+/// which can be stale, e.g. after the seeds or grain parameters were rewritten in the stream.
 pub fn av1_film_grain_present(path: &Path) -> Result<bool> {
     let o = Command::new("ffmpeg")
         .args(["-hide_banner", "-nostdin", "-v", "info", "-i"])
@@ -57,12 +59,7 @@ pub fn av1_film_grain_present(path: &Path) -> Result<bool> {
         .output()
         .context("running ffmpeg trace_headers")?;
     let err = String::from_utf8_lossy(&o.stderr);
-    for line in err.lines() {
-        if line.contains("film_grain_params_present") {
-            return Ok(line.trim_end().ends_with("= 1"));
-        }
-    }
-    Ok(false)
+    Ok(err.lines().any(|l| l.contains("film_grain_params_present") && l.trim_end().ends_with("= 1")))
 }
 
 #[derive(Clone, Debug)]
