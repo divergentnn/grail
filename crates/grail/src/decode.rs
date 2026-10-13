@@ -138,6 +138,9 @@ impl Decoder {
                         cmd.env_remove(k);
                     }
                 }
+                // an av1-fullgrain libdav1d installed as the system one may be built to force its grain on even when
+                // the player turns grain off (grain_force): this decode must stay grain-free
+                cmd.env("DAV1D_GRAIN_FORCE", "0");
             }
             Grain::FullFrame(dir) => {
                 let old = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
