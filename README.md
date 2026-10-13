@@ -147,7 +147,8 @@ scoring and JSON output are in **[docs/usage.md](docs/usage.md)**.
 
 ## Reading the score
 
-- **0 to 100, higher is closer to the source**, on the same scale as SSIMULACRA2.
+- **Up to 100, higher is closer to the source**, on the same scale as SSIMULACRA2. Like SSIMULACRA2, it has no
+  lower bound: badly damaged encodes can score below 0.
 - **Compare encodes of the same scene.** That's where GRAILS is strongest: it picks the encode the viewer preferred
   about 4 times in 5. There is no universal pass mark yet, because where a viewer starts to see a problem still
   varies from scene to scene and film to film.
