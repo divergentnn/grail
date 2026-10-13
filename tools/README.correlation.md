@@ -1,6 +1,7 @@
 ## How well GRAIL agrees with viewers
 
-*Calibration v2.1, 2026-10-12. Cite as: GRAIL v2.1 (2026-10-12), 574 blind showings, one reviewer, held out by film.*
+*Calibration: GRAILS model 0.2.1 (the lab's v2.1), 2026-10-12. Cite as: GRAILS 0.2.1 (2026-10-12), 574 blind
+showings, one reviewer, held out by film.*
 
 ### Dataset
 

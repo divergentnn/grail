@@ -1,6 +1,7 @@
 # GRAIL technical notes
 
-How GRAILS is computed, how closely this Rust implementation reproduces the Python reference, how fast it runs, and
+GRAIL (Grain- and Ringing-Aware Image Likeness) is the method; GRAILS is its score on the SSIMULACRA2 base. How GRAILS
+is computed, how closely this Rust implementation reproduces the Python reference, how fast it runs, and
 how well it agrees with viewers. For installing and using GRAIL see [install.md](install.md) and
 [usage.md](usage.md); the [README](../README.md) is the short version.
 
@@ -20,11 +21,12 @@ comparison of its statistics where it does:
 
 - `S0`: SSIMULACRA2 of the source and the encode as watched. AV1 film grain is rendered full-frame, never as the
   standard decoder's 32x32 tiles.
-- `S_struct`: structure with the grain taken out. A fixed measurement denoiser (flowdegrain2, motion-compensated,
-  GPU) splits source and encode into structure and residual. For AV1 encodes that carry film-grain parameters,
-  `S_struct` compares the denoised source with the grain-free decode; for every other encode, it compares the two
-  denoised pictures. A grain-dependent offset puts both paths on one scale, capped at 100. Blur, blocking, smear and
-  ringing still count; grain counts neither for nor against.
+- `S_struct`: structure with the grain taken out. A fixed measurement denoiser
+  ([flowdenoise](https://github.com/divergentnn/flowdenoise), formerly flowdegrain2; motion-compensated, GPU) splits
+  source and encode into structure and residual. For AV1 encodes that carry film-grain parameters, `S_struct` compares
+  the denoised source with the grain-free decode; for every other encode, it compares the two denoised pictures. A
+  grain-dependent offset puts both paths on one scale, capped at 100. Blur, blocking, smear and ringing still count;
+  grain counts neither for nor against.
 - `p_j`: grain penalties measured against the source's own grain, per luma level, in flat areas: too weak or too
   strong (`under_amp`, `over_amp`, `over`), blobby (`blob`), wrong chroma grain (`chroma`), grain frozen across
   frames (`stick`, `stickc`), and lost texture (`texloss`). Each penalty is about 0 for a faithful copy.
@@ -38,8 +40,8 @@ smoothly toward the grain-aware form. `Q <= 100` always; it reads in SSIMULACRA2
 
 Outputs: the GRAILS score; its parts (plain SSIMULACRA2, structure, the grain term `-sum w p`, the line-art term);
 the structure path (`synth` or `coded`); `g` and `sigma_g`; every penalty and raw feature; per-frame values with
-`--json`; the flavour, the mode and the GRAIL model version. A separate, uncalibrated "standard-decoder seed view"
-rates the AV1 grain seeds for players that tile the grain; it never enters the score.
+`--json`; the flavour, the mode and the GRAILS model version (`model_version`). A separate, uncalibrated
+"standard-decoder seed view" rates the AV1 grain seeds for players that tile the grain; it never enters the score.
 
 ## Flavour naming rule
 
@@ -49,6 +51,19 @@ it is not the full mode ("GRAILS 87.3 (fast)"). Scores of different flavours are
 be compared. Only GRAILS is released: the composite was also fitted on XPSNR-Y, VMAF-NEG, CVVDP and Butteraugli, and
 none agrees clearly better with the verdicts (tables below). A Butteraugli flavour (likely "GRAILB") is the first
 candidate for a second release once more verdicts exist; the letter keeps the two apart.
+
+## Version numbers
+
+- **The model.** Every score carries the version of the model that produced it: "GRAILS 87.49 (full mode, GRAILS
+  model 0.2.1, grail 0.1.0-beta.1)"; `model_version` in the JSON report; `version` in `crates/grail/data/weights.json`.
+  The current model is **0.2.1 = the lab's v2.1** (calibration of 2026-10-12: 574 blind showings, 13 films, one
+  viewer). The next model, fitted in the lab as v2.2, will be 0.3.0.
+- **The rule.** GRAILS stays below 1.0 while it is in beta, and below 1.0 any change that moves scores bumps the minor
+  number (0.2 -> 0.3). Scores are comparable only within one model version. 1.0 comes when calibration from other
+  viewers is in and the scores are stable.
+- **The tool** (the `grail` crate, 0.1.0-beta.1) has its own version. A tool change that is not a model change must
+  not move scores: on CUDA a refactor gives identical scores, and other backends stay within `check-reference`'s
+  tolerances.
 
 ## Limits
 
@@ -65,8 +80,10 @@ candidate for a second release once more verdicts exist; the letter keeps the tw
   from the penalties only). Details: the model notes (`GRAINSCORE.md` in the lab).
 - The encode must have the source's resolution and frame rate, or be a crop of it; there is no scaling
   (`--dist-start` aligns differing frame numbers). HDR: PQ (HDR10) only.
-- Beta tool limits: Linux with NVIDIA (HIP compile-checked) and macOS on Apple silicon (Metal); frame-accurate seeking is by decoding from the start
-  of the file; AV1 film grain needs the av1-fullgrain dav1d build (a self-contained GPU grain renderer is planned).
+- Beta tool limits: Linux with NVIDIA (HIP compile-checked) and macOS on Apple silicon (Metal); frame-accurate seeking
+  is by decoding from the start of the file; AV1 film grain needs the
+  [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) dav1d build (a self-contained GPU grain renderer is
+  planned).
 
 ## Exactness against the Python reference
 
@@ -76,9 +93,10 @@ compares each stage. On the RTX 3090 the port reproduces the reference to roundi
 
 EXACTNESS_TABLE
 
-- The measurement denoiser is **bit-exact**: every output sample equal to flowdegrain2.py's on a 1080p clip (24
-  frames) and a 4K HDR active picture (16 frames, flow scale 2). The kernels are the reference's own, compiled with
-  the same fast-math flag; the CuPy element-wise steps are ported with the same float operations and order statistics.
+- The measurement denoiser is **bit-exact**: every output sample equal to the reference flowdenoise's
+  (`flowdegrain2.py`) on a 1080p clip (24 frames) and a 4K HDR active picture (16 frames, flow scale 2). The kernels are
+  the reference's own, compiled with the same fast-math flag; the CuPy element-wise steps are ported with the same float
+  operations and order statistics.
 - The remaining |dQ| (at most 0.0004) comes from the line-art peak: the reference averages the top 0.1 % of the
   ringing values in float32, the port in float64.
 - Plain SSIMULACRA2 follows FFVship: each file's chroma siting (top-left on most UHD HDR sources, left when
@@ -97,7 +115,7 @@ WHOLESET_LINE
 
 ### On Apple GPUs (Metal)
 
-The Metal backend is not bit-exact: other compilers and fast-math functions (flowdegrain2 is compiled with fast math,
+The Metal backend is not bit-exact: other compilers and fast-math functions (flowdenoise is compiled with fast math,
 as on CUDA), no float64 on Apple GPUs (sums across thread groups are float partials added in double on the host, as
 the CUDA kernels add them with double atomics; the float64 Sobel accumulation is compensated float-float), SIMD-group
 reductions in another order, and libvship's Vulkan build on MoltenVK instead of its CUDA build. The 13 cases of
@@ -218,10 +236,10 @@ it at normal priority.
   restrictions on using the software or its code in machine-learning training and datasets. It is not an
   OSI-approved licence. grail does not include libvship; it loads it at run time, and users must accept its terms
   separately.
-- **flowdegrain2** (measurement denoiser kernels, `kernels/flowdegrain2.cu`): copied from the GRAIL lab
-  (grain-lab/flowdegrain2); same owner as this repository.
-- **FFmpeg** and **dav1d** are run as external programs / libraries (not included). The av1-fullgrain build of
-  libdav1d is BSD-2-Clause (as dav1d).
+- **flowdenoise** (the measurement denoiser kernels, `kernels/flowdegrain2.cu`): from
+  [flowdenoise](https://github.com/divergentnn/flowdenoise); same owner as this repository.
+- **FFmpeg** and **dav1d** are run as external programs / libraries (not included). The
+  [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) build of libdav1d is BSD-2-Clause (as dav1d).
 - **MoltenVK** and the **Vulkan loader** (Apache-2.0): libvship's Vulkan build runs on them on macOS; run-time
   dependencies of libvship, not of grail. **Slang** (`slangc`, Apache-2.0 with LLVM exception): build tool for two of
   libvship's shaders in `tools/build_libvship_macos.sh`.

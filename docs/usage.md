@@ -37,7 +37,8 @@ gets an `error` field and the batch goes on.
 
 Other commands:
 
-- `grail denoise IN.y4m OUT.y4m`: the measurement denoiser alone (10-bit 4:2:0 y4m; `-` for stdin / stdout).
+- `grail denoise IN.y4m OUT.y4m`: the measurement denoiser ([flowdenoise](https://github.com/divergentnn/flowdenoise))
+  alone (10-bit 4:2:0 y4m; `-` for stdin / stdout).
 - `grail check-reference port_reference.json`: runs the reference's test cases and compares every intermediate value
   (see [technical.md](technical.md#exactness-against-the-python-reference); needs the lab's media).
 

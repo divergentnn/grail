@@ -7,9 +7,10 @@ Requirements (Linux; this beta is tested on an RTX 3090 with CUDA 13.4 and drive
 - `ffmpeg` and `ffprobe` on `PATH`, built with libdav1d (and NVDEC for hardware decoding of 4K sources);
 - **libvship** 5.1 (CUDA build), the library under FFVship, for SSIMULACRA2: found as `libvship.so` on the library
   path, `/usr/local/lib/libvship.so`, or `GRAIL_VSHIP=/path/to/libvship.so`;
-- for AV1 encodes with film grain: the **av1-fullgrain** build of libdav1d (full-frame grain rendering), given with
-  `--fullgrain-lib DIR` or `GRAIL_FULLGRAIN_LIB=DIR` (the directory holding its `libdav1d.so.7`). Without it, grail
-  refuses to score such encodes instead of scoring the standard tiled grain.
+- for AV1 encodes with film grain: the **[av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)** build of
+  libdav1d (full-frame grain rendering), given with `--fullgrain-lib DIR` or `GRAIL_FULLGRAIN_LIB=DIR` (the directory
+  holding its `libdav1d.so.7`). Without it, grail refuses to score such encodes instead of scoring the standard tiled
+  grain.
 
 ```
 cargo build --release                         # kernels for sm_75, 80, 86, 89, 90, 120 (+ PTX)
@@ -59,10 +60,11 @@ Requirements:
   `GRAIL_VSHIP` at it. grail turns MoltenVK's fast math off (`MVK_CONFIG_FAST_MATH_ENABLED=0`, unless the variable is
   set): with it on, SSIMULACRA2 moves by up to 0.05 per frame against the CUDA build, without it by at most 0.046 on
   the 13 cases and 0.024 on a window mean;
-- for AV1 encodes with film grain, **av1-fullgrain** (dav1d-fullgrain, branch grain-variants):
-  `meson setup build --buildtype=release && ninja -C build`, then `--fullgrain-lib DIR` / `GRAIL_FULLGRAIN_LIB=DIR`
-  with DIR holding its `libdav1d.7.dylib` (grail puts DIR first on ffmpeg's `DYLD_LIBRARY_PATH`). If Homebrew's
-  libdav1d was replaced by av1-fullgrain (its `packaging/macos/install.sh`), `$(brew --prefix dav1d)/lib` works too.
+- for AV1 encodes with film grain, **[av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)** (dav1d-fullgrain,
+  branch grain-variants): `meson setup build --buildtype=release && ninja -C build`, then `--fullgrain-lib DIR` /
+  `GRAIL_FULLGRAIN_LIB=DIR` with DIR holding its `libdav1d.7.dylib` (grail puts DIR first on ffmpeg's
+  `DYLD_LIBRARY_PATH`). If Homebrew's libdav1d was replaced by av1-fullgrain (its `packaging/macos/install.sh`),
+  `$(brew --prefix dav1d)/lib` works too.
 
 ```
 cargo build --release                          # grail-gpu is empty on macOS; grail uses grail-metal
@@ -82,39 +84,44 @@ target/release/grail denoise in.y4m out.y4m     # the measurement denoiser, 10-b
 
 ## Packaging notes
 
-- **Linux binary.** `target/release/grail` links only glibc (`libc`, `libm`, `libgcc_s`): the kernels are embedded,
-  and the CUDA driver, libvship and (for AV1 grain) the av1-fullgrain libdav1d are loaded at run time. A fully static
-  musl build is not possible this way (static musl cannot `dlopen`); a release binary should be built on an old glibc
-  (e.g. a manylinux-style container) with the full architecture list (the default `GRAIL_CUDA_ARCHS`).
+- **Linux binary.** `target/release/grail` links only glibc (`libc`, `libm`, `libgcc_s`): the kernels are embedded, and
+  the CUDA driver, libvship and (for AV1 grain) the [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain)
+  libdav1d are loaded at run time. A fully static musl build is not possible this way (static musl cannot `dlopen`); a
+  release binary should be built on an old glibc (e.g. a manylinux-style container) with the full architecture list (the
+  default `GRAIL_CUDA_ARCHS`).
 - **CUDA toolkit and driver.** Building needs nvcc; this beta was built with CUDA 13.4. The fatbin holds SASS for
   sm_75 to sm_120 plus PTX for newer GPUs; the driver must support the toolkit's CUDA version (minor-version
   compatibility within the major version). Building with CUDA 12.x widens the range of drivers that can run it
   (12.x: drivers from the 525 series on); CUDA 13 no longer builds for GPUs older than Turing (sm_75).
 - **libvship** must be installed separately (a CUDA build for NVIDIA GPUs); grail loads `libvship.so` (or
-  `GRAIL_VSHIP`). Bundling it would put its licence terms (see [technical.md](technical.md#third-party-components-and-licences)) on the package.
-- **Full-frame AV1 grain** needs the av1-fullgrain libdav1d next to the system ffmpeg (`--fullgrain-lib`). A GPU
-  renderer of full-frame grain from ffmpeg's exported film-grain side data would remove this dependency; it must
-  match av1-fullgrain's full mode exactly, or the scores of AV1 grain encodes change.
+  `GRAIL_VSHIP`). Bundling it would put its licence terms (see
+  [technical.md](technical.md#third-party-components-and-licences)) on the package.
+- **Full-frame AV1 grain** needs the [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) libdav1d next to the
+  system ffmpeg (`--fullgrain-lib`). A GPU renderer of full-frame grain from ffmpeg's exported film-grain side data
+  would remove this dependency; it must match av1-fullgrain's full mode exactly, or the scores of AV1 grain encodes
+  change.
 - **AMD (HIP).** The kernels compile with hipcc (ROCm 7.2.4, gfx1100 / gfx90a); missing: a run on an AMD GPU (scores
   against the CUDA build), a libvship HIP build, and CI for `--features hip`.
-- **Windows.** Missing: driver and library names for `libloading` (`nvcuda.dll`, `vship.dll`), the av1-fullgrain
-  dav1d DLL substitution (PATH order instead of `LD_LIBRARY_PATH`), and a build/test run; nvcc, ffmpeg and the Rust
-  code are otherwise portable.
-- **macOS.** `target/release/grail` links only system frameworks and libraries (Metal, Foundation, libSystem); the Metal kernels are
-  embedded as source and compiled at start, libvship and the av1-fullgrain libdav1d are loaded at run time. Missing
-  for a release: a universal or arm64 build signed and notarized (or a Homebrew formula), a libvship release that runs
-  on MoltenVK without `tools/build_libvship_macos.sh` (the fix belongs upstream), and Intel Macs (Metal works there,
-  untested; AMD / Intel GPUs have other SIMD widths than the 32 lanes the motion search assumes).
+- **Windows.** Missing: driver and library names for `libloading` (`nvcuda.dll`, `vship.dll`), the
+  [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) dav1d DLL substitution (PATH order instead of
+  `LD_LIBRARY_PATH`), and a build/test run; nvcc, ffmpeg and the Rust code are otherwise portable.
+- **macOS.** `target/release/grail` links only system frameworks and libraries (Metal, Foundation, libSystem); the Metal
+  kernels are embedded as source and compiled at start, libvship and the
+  [av1-fullgrain](https://github.com/divergentnn/av1-fullgrain) libdav1d are loaded at run time. Missing for a release:
+  a universal or arm64 build signed and notarized (or a Homebrew formula), a libvship release that runs on MoltenVK
+  without `tools/build_libvship_macos.sh` (the fix belongs upstream), and Intel Macs (Metal works there, untested; AMD /
+  Intel GPUs have other SIMD widths than the 32 lanes the motion search assumes).
 
 
 ## Repository layout
 
-- `kernels/`: CUDA C++ kernels (`flowdegrain2.cu`: the measurement denoiser, verbatim from the reference;
-  `grail.cu`: CuPy-equivalent steps, order statistics, grain features, line art; `portable.h`: CUDA/HIP shim).
+- `kernels/`: CUDA C++ kernels (`flowdegrain2.cu`: the measurement denoiser,
+  [flowdenoise](https://github.com/divergentnn/flowdenoise), verbatim from the reference; `grail.cu`: CuPy-equivalent
+  steps, order statistics, grain features, line art; `portable.h`: CUDA/HIP shim).
 - `crates/grail-stages`: stage interfaces (for other backends).
 - `crates/grail-gpu`: driver layer (CUDA driver API / HIP, loaded at run time), denoiser, features, line art.
 - `crates/grail-metal`: the same stages on Metal (macOS); kernels in `kernels/metal/` (MSL ports of the CUDA files).
-- `crates/grail`: CLI, decoding (ffmpeg), libvship binding, the v2.1 model (`data/weights.json`), seed view
+- `crates/grail`: CLI, decoding (ffmpeg), libvship binding, the GRAILS model 0.2.1 (`data/weights.json`), seed view
   (`data/seed_scores.npy`), reference checks.
 - `tools/`: lab tools (whole-set case file, benchmark; `bench_macos.py`, `build_libvship_macos.sh` for macOS).
 

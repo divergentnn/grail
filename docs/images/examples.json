@@ -1,0 +1,106 @@
+{
+ "grain": {
+  "film": "The Lighthouse (2019)",
+  "image": "docs/images/example-grain.png",
+  "image_size": [
+   880,
+   464
+  ],
+  "frame_in_window": 40,
+  "region_in_window": [
+   470,
+   170,
+   144,
+   196
+  ],
+  "zoom": 2,
+  "window_frames": 79,
+  "model_version": "0.2.1",
+  "tool_version": "0.1.0-beta.1",
+  "mode": "full",
+  "encodes": [
+   {
+    "label": "A: grain smoothed away",
+    "what": "AV1, no grain synthesis",
+    "verdict": "fail",
+    "ssimulacra2": 81.22,
+    "grails": 58.03,
+    "structure": 100.0,
+    "grain_term": -48.8,
+    "lineart_term": 0.0,
+    "path": "coded",
+    "g": 0.773,
+    "line_art_a": 0.0,
+    "mbps": 1.21,
+    "frames_scored": 79
+   },
+   {
+    "label": "B: denoise + AV1 grain",
+    "what": "denoised, AV1 film grain",
+    "verdict": "pass",
+    "ssimulacra2": 75.67,
+    "grails": 93.27,
+    "structure": 98.87,
+    "grain_term": -0.42,
+    "lineart_term": 0.0,
+    "path": "synth",
+    "g": 0.773,
+    "line_art_a": 0.0,
+    "mbps": 0.9,
+    "frames_scored": 79
+   }
+  ]
+ },
+ "lineart": {
+  "film": "Your Name (2016)",
+  "image": "docs/images/example-lineart.png",
+  "image_size": [
+   880,
+   462
+  ],
+  "frame_in_window": 17,
+  "region_in_window": [
+   1792,
+   448,
+   96,
+   130
+  ],
+  "zoom": 3,
+  "window_frames": 79,
+  "model_version": "0.2.1",
+  "tool_version": "0.1.0-beta.1",
+  "mode": "full",
+  "encodes": [
+   {
+    "label": "A: SVT-AV1 preset 6",
+    "what": "SVT-AV1 4.2.0 preset 6",
+    "verdict": "fail",
+    "ssimulacra2": 72.64,
+    "grails": 61.78,
+    "structure": 79.18,
+    "grain_term": -9.24,
+    "lineart_term": -10.86,
+    "path": "coded",
+    "g": 0.0,
+    "line_art_a": 1.0,
+    "mbps": 1.51,
+    "frames_scored": 79
+   },
+   {
+    "label": "B: SVT-AV1 preset 2",
+    "what": "SVT-AV1 4.2.0 preset 2",
+    "verdict": "pass",
+    "ssimulacra2": 77.86,
+    "grails": 77.86,
+    "structure": 82.93,
+    "grain_term": -7.73,
+    "lineart_term": -0.0,
+    "path": "coded",
+    "g": 0.0,
+    "line_art_a": 1.0,
+    "mbps": 1.51,
+    "frames_scored": 79
+   }
+  ]
+ }
+}
